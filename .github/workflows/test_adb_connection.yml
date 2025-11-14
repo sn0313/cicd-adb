@@ -11,15 +11,15 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
 
-    - name: Install Oracle Instant Client
+    - name: Install Oracle Instant Client using zip
       run: |
         sudo apt-get update
-        sudo apt-get install -y unzip libaio1
-        # Add Oracle repository for Instant Client 19
-        sudo apt-get install -y wget
-        wget https://download.oracle.com/otn_software/linux/instantclient/1912000/oracle-instantclient19.12-basiclite_19.12.0.0.0-1_amd64.deb
-        sudo dpkg -i oracle-instantclient19.12-basiclite_19.12.0.0.0-1_amd64.deb
-        export LD_LIBRARY_PATH=/usr/lib/oracle/19.12/client64/lib:$LD_LIBRARY_PATH
+        sudo apt-get install -y libaio1 unzip
+        wget https://download.oracle.com/otn_software/linux/instantclient/1927000/instantclient-basic-linux.x64-19.27.0.0.0dbru.zip
+        unzip instantclient-basic-linux.x64-19.27.0.0.0dbru.zip -d $HOME/instantclient
+        export LD_LIBRARY_PATH=$HOME/instantclient:$LD_LIBRARY_PATH
+        export PATH=$HOME/instantclient:$PATH
+
 
     - name: Prepare Wallet
       run: |
