@@ -16,49 +16,35 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y libaio1t64 unzip wget
 
-        # Fix libaio needed for Oracle
+        # Fix missing libaio.so.1 required by Oracle Instant Client
         sudo ln -s /lib/x86_64-linux-gnu/libaio.so.1t64 /lib/x86_64-linux-gnu/libaio.so.1
 
-        # Download Instant Client packages
+        # Download Instant Client
         wget https://download.oracle.com/otn_software/linux/instantclient/1927000/instantclient-basic-linux.x64-19.27.0.0.0dbru.zip
         unzip -o instantclient-basic-linux.x64-19.27.0.0.0dbru.zip -d $HOME
 
         wget https://download.oracle.com/otn_software/linux/instantclient/1927000/instantclient-sqlplus-linux.x64-19.27.0.0.0dbru.zip
         unzip -o instantclient-sqlplus-linux.x64-19.27.0.0.0dbru.zip -d $HOME
 
-        echo "$HOME/instantclient_19_27" >> $GITHUB_PATH
         export LD_LIBRARY_PATH=$HOME/instantclient_19_27:$LD_LIBRARY_PATH
+        export PATH=$HOME/instantclient_19_27:$PATH
 
         sqlplus -v
 
-    - name: Copy Wallet Files (from wallet folder)
+    - name: Prepare Wallet
       run: |
-        mkdir -p $HOME/adb_wallet
-        cp wallet/* $HOME/adb_wallet/
-
-        echo "Wallet contents:"
-        ls -R $HOME/adb_wallet
+        echo "${{ secrets.ADB_WALLET }}" | base64 --decode > wallet.zip
+        unzip -o wallet.zip -d $HOME/adb_wallet
 
     - name: Test SQL Connection
-      env:
-        ADB_USER: ${{ secrets.ADB_USER }}
-        ADB_PASSWORD: ${{ secrets.ADB_PASSWORD }}
-        ADB_TNS: ${{ secrets.ADB_TNS }}
       run: |
         export TNS_ADMIN=$HOME/adb_wallet
         export LD_LIBRARY_PATH=$HOME/instantclient_19_27:$LD_LIBRARY_PATH
         export PATH=$HOME/instantclient_19_27:$PATH
 
-        echo "Using TNS alias: $ADB_TNS"
-        
-        echo "--- tnsnames.ora ---"
-        cat $HOME/adb_wallet/tnsnames.ora
+        echo "SELECT SYSDATE FROM dual;" | sqlplus "${{ secrets.ADB_USER }}/${{ secrets.ADB_PASSWORD }}@${{ secrets.ADB_TNS }}"
 
-        echo "Testing connection..."
-        echo "SELECT SYSDATE FROM dual;" | sqlplus "$ADB_USER/$ADB_PASSWORD@$ADB_TNS"
-
-        echo "Testing connection..."
-        echo "exit" | sqlplus "$ADB_USER/$ADB_PASSWORD@$ADB_TNS"
+        export PATH=$HOME/instantclient_19_27:$PATH
 
 
 
