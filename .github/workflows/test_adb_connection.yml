@@ -5,7 +5,7 @@ on:
 
 jobs:
   test-connection:
-    runs-on: ubuntu-latest 24.04
+    runs-on: ubuntu-latest 
 
     steps:
     - name: Checkout code
