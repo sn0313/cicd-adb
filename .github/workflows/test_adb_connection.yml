@@ -11,21 +11,21 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
 
-        - name: Install Oracle Instant Client + SQL*Plus
-          run: |
-            sudo apt-get update
-            sudo apt-get install -y libaio1t64 unzip wget
-            # Download Basic package
-            wget https://download.oracle.com/otn_software/linux/instantclient/1927000/instantclient-basic-linux.x64-19.27.0.0.0dbru.zip
-            unzip instantclient-basic-linux.x64-19.27.0.0.0dbru.zip -d $HOME
-            # Download SQL*Plus package
-            wget https://download.oracle.com/otn_software/linux/instantclient/1927000/instantclient-sqlplus-linux.x64-19.27.0.0.0dbru.zip
-            unzip instantclient-sqlplus-linux.x64-19.27.0.0.0dbru.zip -d $HOME
+    - name: Install Oracle Instant Client + SQL*Plus
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libaio1t64 unzip wget
+        # Download Basic package
+        wget https://download.oracle.com/otn_software/linux/instantclient/1927000/instantclient-basic-linux.x64-19.27.0.0.0dbru.zip
+        unzip instantclient-basic-linux.x64-19.27.0.0.0dbru.zip -d $HOME
+        # Download SQL*Plus package
+        wget https://download.oracle.com/otn_software/linux/instantclient/1927000/instantclient-sqlplus-linux.x64-19.27.0.0.0dbru.zip
+        unzip instantclient-sqlplus-linux.x64-19.27.0.0.0dbru.zip -d $HOME
 
-            export LD_LIBRARY_PATH=$HOME/instantclient_19_27:$LD_LIBRARY_PATH
-            export PATH=$HOME/instantclient_19_27:$PATH
+        export LD_LIBRARY_PATH=$HOME/instantclient_19_27:$LD_LIBRARY_PATH
+        export PATH=$HOME/instantclient_19_27:$PATH
     
-            sqlplus -v
+        sqlplus -v
 
 
     - name: Prepare Wallet
