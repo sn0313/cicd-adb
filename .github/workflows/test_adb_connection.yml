@@ -11,13 +11,14 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
 
-    - name: Install Oracle Instant Client
+    - name: Install Oracle Instant Client via rpm + alien
       run: |
         sudo apt-get update
-        sudo apt-get install -y libaio1 unzip
-        curl -O https://download.oracle.com/otn_software/linux/instantclient/instantclient-basiclite-linux.x64-21.12.0.0.0.zip
-        unzip instantclient-basiclite-linux.x64-21.12.0.0.0.zip -d $HOME/oracle
-        export LD_LIBRARY_PATH=$HOME/oracle/instantclient_21_12:$LD_LIBRARY_PATH
+        sudo apt-get install -y libaio1 alien wget
+        wget https://yum.oracle.com/repo/OracleLinux/OL7/oracle/instantclient/x86_64/oracle-instantclient19.12-basiclite-19.12.0.0.0-1.x86_64.rpm
+        sudo alien -i --scripts oracle-instantclient19.12-basiclite-19.12.0.0.0-1.x86_64.rpm
+        export LD_LIBRARY_PATH=/usr/lib/oracle/19.12/client64/lib:$LD_LIBRARY_PATH
+
 
     - name: Prepare Wallet
       run: |
