@@ -1,55 +1,52 @@
-name: Test ADB Connection
+name: CI Oracle SQL
 
 on:
   workflow_dispatch:
 
 jobs:
-  test-connection:
+  run-sql:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-    - name: Install Oracle Instant Client + SQL*Plus
+    - name: Install dependencies
       run: |
-        sudo apt-get update
-        sudo apt-get install -y libaio1t64 unzip wget
+        sudo apt-get update -y
+        sudo apt-get install -y libaio1 unzip
 
-        # Fix missing libaio.so.1 required by Oracle Instant Client
-        sudo ln -s /lib/x86_64-linux-gnu/libaio.so.1t64 /lib/x86_64-linux-gnu/libaio.so.1
+    - name: Install Oracle Instant Client (Basic + SQLPlus)
+      run: |
+        wget https://download.oracle.com/otn_software/linux/instantclient/instantclient-basiclite-linux.x64-19.27.0.0.0dbru.zip
+        wget https://download.oracle.com/otn_software/linux/instantclient/instantclient-sqlplus-linux.x64-19.27.0.0.0dbru.zip
 
-        # Download Instant Client
-        wget https://download.oracle.com/otn_software/linux/instantclient/1927000/instantclient-basic-linux.x64-19.27.0.0.0dbru.zip
-        unzip -o instantclient-basic-linux.x64-19.27.0.0.0dbru.zip -d $HOME
+        unzip instantclient-basiclite-linux.x64-19.27.0.0.0dbru.zip -d $HOME
+        unzip instantclient-sqlplus-linux.x64-19.27.0.0.0dbru.zip -d $HOME
 
-        wget https://download.oracle.com/otn_software/linux/instantclient/1927000/instantclient-sqlplus-linux.x64-19.27.0.0.0dbru.zip
-        unzip -o instantclient-sqlplus-linux.x64-19.27.0.0.0dbru.zip -d $HOME
-
+        echo "$HOME/instantclient_19_27" >> $GITHUB_PATH
         export LD_LIBRARY_PATH=$HOME/instantclient_19_27:$LD_LIBRARY_PATH
-        export PATH=$HOME/instantclient_19_27:$PATH
 
-        sqlplus -v
-
-    - name: Prepare Wallet (from repo folder)
+    - name: Set TNS_ADMIN (point to repo wallet folder)
       run: |
-        mkdir -p $HOME/adb_wallet
-        cp wallet/* $HOME/adb_wallet/
+        echo "Setting TNS_ADMIN to $GITHUB_WORKSPACE/wallet"
+        export TNS_ADMIN=$GITHUB_WORKSPACE/wallet
+        echo "TNS_ADMIN=$TNS_ADMIN" >> $GITHUB_ENV
 
-        echo "Wallet files copied:"
-        ls -l $HOME/adb_wallet
-
-        echo "---- tnsnames.ora ----"
-        cat $HOME/adb_wallet/tnsnames.ora
-
-    - name: Test SQL Connection
+    - name: Debug Wallet Folder
       run: |
-        export TNS_ADMIN=$HOME/adb_wallet
-        export LD_LIBRARY_PATH=$HOME/instantclient_19_27:$LD_LIBRARY_PATH
-        export PATH=$HOME/instantclient_19_27:$PATH
+        echo "Wallet directory content:"
+        ls -al $GITHUB_WORKSPACE/wallet
 
-        echo "Using TNS alias: ${{ secrets.ADB_TNS }}"
-        echo "SELECT SYSDATE FROM dual;" | sqlplus "${{ secrets.ADB_USER }}/${{ secrets.ADB_PASSWORD }}@${{ secrets.ADB_TNS }}"
+    - name: Run SQL script
+      env:
+        ADB_USER: ${{ secrets.ADB_USER }}
+        ADB_PASSWORD: ${{ secrets.ADB_PASSWORD }}
+        ADB_TNS: ${{ secrets.ADB_TNS }}
+      run: |
+        echo "Connecting to ADB using alias: $ADB_TNS"
+        echo "exit" | sqlplus "${ADB_USER}/${ADB_PASSWORD}@${ADB_TNS}"
+
 
 
 
