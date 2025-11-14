@@ -7,18 +7,12 @@ jobs:
   test-connection:
     runs-on: ubuntu-latest
 
-    env:
-      LD_LIBRARY_PATH: ${{ github.workspace }}/instantclient/instantclient_19_27
-      PATH: ${{ github.workspace }}/instantclient/instantclient_19_27:${{ env.PATH }}
-      TNS_ADMIN: ${{ github.workspace }}/adb_wallet
-      ADB_USER: ${{ secrets.ADB_USER }}
-      ADB_PASSWORD: ${{ secrets.ADB_PASSWORD }}
-      ADB_TNS: ${{ secrets.ADB_TNS }}
-
     steps:
+    # 1. Checkout code
     - name: Checkout code
       uses: actions/checkout@v3
 
+    # 2. Install Oracle Instant Client + SQL*Plus
     - name: Install Oracle Instant Client + SQL*Plus
       run: |
         sudo apt-get update
@@ -34,32 +28,48 @@ jobs:
         wget https://download.oracle.com/otn_software/linux/instantclient/1927000/instantclient-sqlplus-linux.x64-19.27.0.0.0dbru.zip
         unzip -o instantclient-sqlplus-linux.x64-19.27.0.0.0dbru.zip -d $HOME/instantclient
 
-        # Verify sqlplus installation
-        $HOME/instantclient/instantclient_19_27/sqlplus -v
+        # Set environment variables for this step
+        export LD_LIBRARY_PATH=$HOME/instantclient/instantclient_19_27:$LD_LIBRARY_PATH
+        export PATH=$HOME/instantclient/instantclient_19_27:$PATH
 
+        # Verify sqlplus installation
+        sqlplus -v
+
+    # 3. Decode the ADB wallet
     - name: Prepare Wallet
       run: |
         mkdir -p $HOME/adb_wallet
         echo "${{ secrets.ADB_WALLET }}" | base64 --decode > wallet.zip
         unzip -o wallet.zip -d $HOME/adb_wallet
 
+    # 4. Test SQL Connection using SQL*Plus
     - name: Test SQL Connection with SQL*Plus
       run: |
-        echo "SELECT sysdate FROM dual;" | $HOME/instantclient/instantclient_19_27/sqlplus $ADB_USER/$ADB_PASSWORD@$ADB_TNS
+        export LD_LIBRARY_PATH=$HOME/instantclient/instantclient_19_27:$LD_LIBRARY_PATH
+        export PATH=$HOME/instantclient/instantclient_19_27:$PATH
+        export TNS_ADMIN=$HOME/adb_wallet
 
+        echo "SELECT sysdate FROM dual;" | sqlplus ${{ secrets.ADB_USER }}/"${{ secrets.ADB_PASSWORD }}"@${{ secrets.ADB_TNS }}
+
+    # 5. Optional: Test SQL Connection using Python
     - name: Test SQL Connection with Python (optional)
       run: |
-        python3 -m pip install oracledb
+        python3 -m pip install --upgrade oracledb
         python3 - <<EOF
-        import os
-        import oracledb
+import os
+import oracledb
 
-        os.environ["TNS_ADMIN"] = os.path.expanduser("$HOME/adb_wallet")
-        conn = oracledb.connect(
-            user=os.environ.get("ADB_USER"),
-            password=os.environ.get("ADB_PASSWORD"),
-            dsn=os.environ.get("ADB_TNS")
-        )
+os.environ["TNS_ADMIN"] = os.path.expanduser("$HOME/adb_wallet")
+conn = oracledb.connect(
+    user=os.environ.get("ADB_USER"),
+    password=os.environ.get("ADB_PASSWORD"),
+    dsn=os.environ.get("ADB_TNS")
+)
+cur = conn.cursor()
+cur.execute("SELECT sysdate FROM dual")
+print("Database connection successful, sysdate =", cur.fetchone()[0])
+EOF
+
         cur = conn.cursor()
         cur.execute("SELECT sysdate FROM dual")
         print("Database connection successful, sysdate =", cur.fetchone()[0])
