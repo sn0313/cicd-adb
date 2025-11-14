@@ -16,7 +16,7 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y libaio1t64 unzip wget
 
-        # Fix missing libaio.so.1 required by Oracle Instant Client
+        # Fix libaio dependency for Oracle Instant Client
         sudo ln -s /lib/x86_64-linux-gnu/libaio.so.1t64 /lib/x86_64-linux-gnu/libaio.so.1
 
         # Download Instant Client
@@ -31,10 +31,19 @@ jobs:
 
         sqlplus -v
 
-    - name: Prepare Wallet
+    - name: Copy Wallet Files From Repo Root
       run: |
-        echo "${{ secrets.ADB_WALLET }}" | base64 --decode > wallet.zip
-        unzip -o wallet.zip -d $HOME/adb_wallet
+        mkdir -p $HOME/adb_wallet
+        cp cwallet.sso $HOME/adb_wallet
+        cp ewallet.pem $HOME/adb_wallet
+        cp keystore.jks $HOME/adb_wallet
+        cp ojdbc.properties $HOME/adb_wallet
+        cp sqlnet.ora $HOME/adb_wallet
+        cp tnsnames.ora $HOME/adb_wallet
+        cp truststore.jks $HOME/adb_wallet
+
+        echo "Wallet contents:"
+        ls -R $HOME/adb_wallet
 
     - name: Test SQL Connection
       run: |
@@ -42,10 +51,11 @@ jobs:
         export LD_LIBRARY_PATH=$HOME/instantclient_19_27:$LD_LIBRARY_PATH
         export PATH=$HOME/instantclient_19_27:$PATH
 
-        echo "SELECT SYSDATE FROM dual;" | sqlplus "${{ secrets.ADB_USER }}/${{ secrets.ADB_PASSWORD }}@${{ secrets.ADB_TNS }}"
+        echo "Using TNS alias: ${{ secrets.ADB_TNS }}"
+        echo "--- tnsnames.ora ---"
+        cat $HOME/adb_wallet/tnsnames.ora
 
-        export PATH=$HOME/instantclient_19_27:$PATH
-
+        echo "Testing connection..."
         echo "SELECT SYSDATE FROM dual;" | sqlplus "${{ secrets.ADB_USER }}/${{ secrets.ADB_PASSWORD }}@${{ secrets.ADB_TNS }}"
 
 
