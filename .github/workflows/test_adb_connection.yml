@@ -32,13 +32,13 @@ jobs:
 
         sqlplus -v
 
-    - name: Copy Wallet Files (from cicd-adb/wallet folder)
+    - name: Copy Wallet Files (from wallet folder in repo)
       run: |
-        mkdir -p $HOME/adb_wallet
-        cp cicd-adb/wallet/* $HOME/adb_wallet/
+       mkdir -p $HOME/adb_wallet
+       cp $GITHUB_WORKSPACE/wallet/* $HOME/adb_wallet/
 
-        echo "Wallet contents:"
-        ls -R $HOME/adb_wallet
+       echo "Wallet contents:"
+      ls -R $HOME/adb_wallet
 
     - name: Test SQL Connection
       env:
