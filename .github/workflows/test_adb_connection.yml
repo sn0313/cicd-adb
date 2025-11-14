@@ -1,7 +1,7 @@
 name: Test ADB Connection
 
 on:
-  workflow_dispatch:  # allows manual run for testing
+  workflow_dispatch: {}
 
 jobs:
   test-connection:
@@ -11,13 +11,20 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
 
-    - name: Install Oracle Instant Client via rpm + alien
-      run: |
-      sudo apt-get update
-      sudo apt-get install -y libaio1 alien wget
-      wget https://yum.oracle.com/repo/OracleLinux/OL7/oracle/instantclient/x86_64/oracle-instantclient19.12-basiclite-19.12.0.0.0-1.x86_64.rpm
-      sudo alien -i --scripts oracle-instantclient19.12-basiclite-19.12.0.0.0-1.x86_64.rpm
-      export LD_LIBRARY_PATH=/usr/lib/oracle/19.12/client64/lib:$LD_LIBRARY_PATH
+    - name: Install Oracle Instant Client + SQL*Plus
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libaio1 unzip
+          # Basic Instant Client
+          wget https://download.oracle.com/otn_software/linux/instantclient/1927000/instantclient-basic-linux.x64-19.27.0.0.0dbru.zip
+          unzip -o instantclient-basic-linux.x64-19.27.0.0.0dbru.zip -d $HOME/instantclient
+          # SQL*Plus package
+          wget https://download.oracle.com/otn_software/linux/instantclient/1927000/instantclient-sqlplus-linux.x64-19.27.0.0.0dbru.zip
+          unzip -o instantclient-sqlplus-linux.x64-19.27.0.0.0dbru.zip -d $HOME/instantclient
+          export LD_LIBRARY_PATH=$HOME/instantclient/instantclient_19_27:$LD_LIBRARY_PATH
+          export PATH=$HOME/instantclient/instantclient_19_27:$PATH
+          sqlplus -v
+
 
 
     - name: Prepare Wallet
