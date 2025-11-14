@@ -38,7 +38,7 @@ jobs:
        cp $GITHUB_WORKSPACE/wallet/* $HOME/adb_wallet/
 
        echo "Wallet contents:"
-      ls -R $HOME/adb_wallet
+       ls -R $HOME/adb_wallet
 
     - name: Test SQL Connection
       env:
