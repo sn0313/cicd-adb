@@ -31,13 +31,24 @@ jobs:
 
         sqlplus -v
 
-    - name: Prepare Wallet (copy from repo)
+    - name: Prepare Wallet (copy from repo + fix sqlnet.ora)
       run: |
         mkdir -p $HOME/adb_wallet
         cp -r $GITHUB_WORKSPACE/wallet/* $HOME/adb_wallet/
+        chmod 600 $HOME/adb_wallet/*
+
+        # Overwrite sqlnet.ora to point to correct wallet folder
+        cat > $HOME/adb_wallet/sqlnet.ora <<EOF
+        WALLET_LOCATION = (SOURCE = (METHOD = file) (METHOD_DATA = (DIRECTORY="$HOME/adb_wallet")))
+        SSL_SERVER_DN_MATCH = yes
+        EOF
 
         echo "Wallet files:"
         ls -l $HOME/adb_wallet
+
+        echo "--- Updated sqlnet.ora ---"
+        cat $HOME/adb_wallet/sqlnet.ora
+
 
     - name: Test SQL Connection
       run: |
