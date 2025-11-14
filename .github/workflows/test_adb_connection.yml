@@ -8,36 +8,60 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    # 1. Checkout code
     - name: Checkout code
       uses: actions/checkout@v3
 
+    # 2. Install Oracle Instant Client + SQL*Plus
     - name: Install Oracle Instant Client + SQL*Plus
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libaio1 unzip
-          # Basic Instant Client
-          wget https://download.oracle.com/otn_software/linux/instantclient/1927000/instantclient-basic-linux.x64-19.27.0.0.0dbru.zip
-          unzip -o instantclient-basic-linux.x64-19.27.0.0.0dbru.zip -d $HOME/instantclient
-          # SQL*Plus package
-          wget https://download.oracle.com/otn_software/linux/instantclient/1927000/instantclient-sqlplus-linux.x64-19.27.0.0.0dbru.zip
-          unzip -o instantclient-sqlplus-linux.x64-19.27.0.0.0dbru.zip -d $HOME/instantclient
-          export LD_LIBRARY_PATH=$HOME/instantclient/instantclient_19_27:$LD_LIBRARY_PATH
-          export PATH=$HOME/instantclient/instantclient_19_27:$PATH
-          sqlplus -v
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libaio1 unzip wget
+        mkdir -p $HOME/instantclient
 
+        # Download and unzip Basic Client
+        wget https://download.oracle.com/otn_software/linux/instantclient/1927000/instantclient-basic-linux.x64-19.27.0.0.0dbru.zip
+        unzip -o instantclient-basic-linux.x64-19.27.0.0.0dbru.zip -d $HOME/instantclient
 
+        # Download and unzip SQL*Plus package
+        wget https://download.oracle.com/otn_software/linux/instantclient/1927000/instantclient-sqlplus-linux.x64-19.27.0.0.0dbru.zip
+        unzip -o instantclient-sqlplus-linux.x64-19.27.0.0.0dbru.zip -d $HOME/instantclient
 
+        # Set environment variables
+        export LD_LIBRARY_PATH=$HOME/instantclient/instantclient_19_27:$LD_LIBRARY_PATH
+        export PATH=$HOME/instantclient/instantclient_19_27:$PATH
+
+        # Verify sqlplus installation
+        sqlplus -v
+
+    # 3. Decode the ADB wallet
     - name: Prepare Wallet
       run: |
+        mkdir -p $HOME/adb_wallet
         echo "${{ secrets.ADB_WALLET }}" | base64 --decode > wallet.zip
-        unzip wallet.zip -d $HOME/adb_wallet
+        unzip -o wallet.zip -d $HOME/adb_wallet
 
-    - name: Test SQL Connection
+    # 4. Test SQL Connection using SQL*Plus
+    - name: Test SQL Connection with SQL*Plus
       run: |
         export TNS_ADMIN=$HOME/adb_wallet
-        echo "SELECT sysdate FROM dual;" | sqlplus ${{ secrets.ADB_USER }}/$ {{ secrets.ADB_PASSWORD }}@${{ secrets.ADB_TNS }}
+        echo "SELECT sysdate FROM dual;" | sqlplus ${{ secrets.ADB_USER }}/"${{ secrets.ADB_PASSWORD }}"@${{ secrets.ADB_TNS }}
 
+    # 5. Optional: Test SQL Connection using Python oracledb
+    - name: Test SQL Connection with Python (optional)
+      run: |
+        python3 -m pip install oracledb
+        python3 - <<EOF
+        import os
+        import oracledb
 
-cur = conn.cursor()
-cur.execute("SELECT sysdate FROM dual")
-print("Database connection successful, sysdate =", cur.fetchone
+        os.environ["TNS_ADMIN"] = os.path.expanduser("$HOME/adb_wallet")
+        conn = oracledb.connect(
+            user=os.environ.get("ADB_USER"),
+            password=os.environ.get("ADB_PASSWORD"),
+            dsn=os.environ.get("ADB_TNS")
+        )
+        cur = conn.cursor()
+        cur.execute("SELECT sysdate FROM dual")
+        print("Database connection successful, sysdate =", cur.fetchone()[0])
+EOF
