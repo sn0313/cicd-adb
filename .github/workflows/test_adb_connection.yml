@@ -31,10 +31,16 @@ jobs:
 
         sqlplus -v
 
-    - name: Prepare Wallet
+    - name: Prepare Wallet (from repo folder)
       run: |
-        echo "${{ secrets.ADB_WALLET }}" | base64 --decode > wallet.zip
-        unzip -o wallet.zip -d $HOME/adb_wallet
+        mkdir -p $HOME/adb_wallet
+        cp wallet/* $HOME/adb_wallet/
+
+        echo "Wallet files copied:"
+        ls -l $HOME/adb_wallet
+
+        echo "---- tnsnames.ora ----"
+        cat $HOME/adb_wallet/tnsnames.ora
 
     - name: Test SQL Connection
       run: |
@@ -42,9 +48,9 @@ jobs:
         export LD_LIBRARY_PATH=$HOME/instantclient_19_27:$LD_LIBRARY_PATH
         export PATH=$HOME/instantclient_19_27:$PATH
 
+        echo "Using TNS alias: ${{ secrets.ADB_TNS }}"
         echo "SELECT SYSDATE FROM dual;" | sqlplus "${{ secrets.ADB_USER }}/${{ secrets.ADB_PASSWORD }}@${{ secrets.ADB_TNS }}"
 
-        export PATH=$HOME/instantclient_19_27:$PATH
 
 
 
