@@ -1,0 +1,23 @@
+name: Create Pull Request
+
+on:
+  push:
+    branches:
+      - 'feature/*'  # Any feature branch for SQL changes
+
+jobs:
+  create-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "Database changes pushed"
+          title: "DB Changes from ${{ github.ref_name }}"
+          body: "Automated PR for database changes."
+          base: main
+          branch: ${{ github.ref_name }}
