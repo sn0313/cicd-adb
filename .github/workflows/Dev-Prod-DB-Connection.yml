@@ -1,4 +1,4 @@
-name: Test ADB DEV + PROD Connections (Full Debug)
+name: Test ADB DEV + PROD Connections
 
 on:
   workflow_dispatch:
@@ -11,15 +11,15 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
 
-    - name: Install Oracle Instant Client + SQL*Plus + DNS Utilities
+    - name: Install Oracle Instant Client + SQL*Plus
       run: |
         sudo apt-get update
-        sudo apt-get install -y libaio1t64 unzip wget dnsutils iputils-ping
+        sudo apt-get install -y libaio1t64 unzip wget
 
-        # Fix missing libaio.so.1
+        # Fix missing libaio.so.1 required by Oracle Instant Client
         sudo ln -s /lib/x86_64-linux-gnu/libaio.so.1t64 /lib/x86_64-linux-gnu/libaio.so.1
 
-        # Install Instant Client
+        # Download Instant Client
         wget https://download.oracle.com/otn_software/linux/instantclient/1927000/instantclient-basic-linux.x64-19.27.0.0.0dbru.zip
         unzip -o instantclient-basic-linux.x64-19.27.0.0.0dbru.zip -d $HOME
 
@@ -28,136 +28,108 @@ jobs:
 
         export LD_LIBRARY_PATH=$HOME/instantclient_19_27:$LD_LIBRARY_PATH
         export PATH=$HOME/instantclient_19_27:$PATH
+
         sqlplus -v
 
-    ###########################################################################
-    # DEV
-    ###########################################################################
-    - name: Prepare DEV Wallet
+    # -------------------------
+    # DEV DATABASE CONNECTION
+    # -------------------------
+    - name: Prepare DEV Wallet (copy from wallet/)
       run: |
         mkdir -p $HOME/adb_wallet_dev
         cp -r $GITHUB_WORKSPACE/wallet/* $HOME/adb_wallet_dev/
         chmod 600 $HOME/adb_wallet_dev/*
 
-        # Add debugging flags to sqlnet.ora
+        # Write updated sqlnet.ora
         cat > $HOME/adb_wallet_dev/sqlnet.ora <<EOF
-        WALLET_LOCATION = (SOURCE = (METHOD = file)(METHOD_DATA = (DIRECTORY="$HOME/adb_wallet_dev")))
+        WALLET_LOCATION = (SOURCE = (METHOD = file) (METHOD_DATA = (DIRECTORY="$HOME/adb_wallet_dev")))
         SSL_SERVER_DN_MATCH = yes
-
-        TRACE_LEVEL_CLIENT = USER
-        TRACE_DIRECTORY_CLIENT = $HOME/adb_wallet_dev
-        TRACE_FILE_CLIENT = trace_dev.log
-        DIAG_ADR_ENABLED = OFF
         EOF
 
-        echo "--- DEV WALLET CONTENTS ---"
-        ls -R $HOME/adb_wallet_dev
+        echo "--- DEV Wallet files ---"
+        ls -l $HOME/adb_wallet_dev
+        echo "--- DEV sqlnet.ora ---"
+        cat $HOME/adb_wallet_dev/sqlnet.ora
 
-    - name: Show DEV tnsnames.ora
-      run: |
-        echo "--- DEV tnsnames.ora ---"
-        cat $HOME/adb_wallet_dev/tnsnames.ora
-
-    - name: DNS Debug for DEV host
-      run: |
-        DEV_HOST=$(grep -oP '(?<=HOST = ).*(?=\))' $HOME/adb_wallet_dev/tnsnames.ora | head -n1)
-        echo "DEV HOST = $DEV_HOST"
-
-        echo "--- nslookup ---"
-        nslookup $DEV_HOST || true
-
-        echo "--- dig ---"
-        dig $DEV_HOST || true
-
-        echo "--- ping ---"
-        ping -c 4 $DEV_HOST || true
-
-    - name: Test SQL Connection (DEV) With Verbose Logs
+    - name: Test SQL Connection (DEV)
       run: |
         export TNS_ADMIN=$HOME/adb_wallet_dev
         export LD_LIBRARY_PATH=$HOME/instantclient_19_27:$LD_LIBRARY_PATH
         export PATH=$HOME/instantclient_19_27:$PATH
 
-        echo "CONNECT STRING = ${{ secrets.ADB_USER }}/${{ secrets.ADB_PASSWORD }}@${{ secrets.ADB_TNS }}"
-        
-        # List Wallet files
-        echo "--- WALLET FILES ---"
-        ls -l $TNS_ADMIN
+        echo "SELECT 'DEV DB OK', SYSDATE FROM dual;" | \
+          sqlplus "${{ secrets.ADB_USER }}/${{ secrets.ADB_PASSWORD }}@${{ secrets.ADB_TNS }}"
 
-        echo "--- SQLPLUS DEBUG ---"
-        sqlplus -lint -prelim /nolog <<EOF
-        conn ${{ secrets.ADB_USER }}/${{ secrets.ADB_PASSWORD }}@${{ secrets.ADB_TNS }}
-        EOF
-
-        echo "--- TRACE LOG (if exists) ---"
-        cat $HOME/adb_wallet_dev/trace_dev.log || true
-
-    ###########################################################################
-    # PROD
-    ###########################################################################
-    - name: Prepare PROD Wallet
+    # -------------------------
+    # PROD DATABASE CONNECTION
+    # -------------------------
+    - name: Prepare PROD Wallet (copy from wallet_prod/ + base64 decode + flatten)
       run: |
         mkdir -p $HOME/adb_wallet_prod
 
+        # Copy repo wallet if present (optional fallback)
+        cp -r $GITHUB_WORKSPACE/wallet_prod/* $HOME/adb_wallet_prod/ 2>/dev/null || true
+
+        # Decode Base64 wallet (highest priority)
         if [ -n "${{ secrets.ADB_PROD_WALLET }}" ]; then
           echo "Decoding Base64 PROD wallet..."
           echo "${{ secrets.ADB_PROD_WALLET }}" | base64 -d > $HOME/prod_wallet.zip
           unzip -o $HOME/prod_wallet.zip -d $HOME/adb_wallet_prod
-        else
-          echo "Using wallet_prod/ folder from repo..."
-          cp -r $GITHUB_WORKSPACE/wallet_prod/* $HOME/adb_wallet_prod/ 2>/dev/null || true
         fi
-        
+
+        # Flatten nested folder (Wallet_ReviewDB or similar)
+        for DIR in $HOME/adb_wallet_prod/*/; do
+          if [ -f "${DIR}tnsnames.ora" ]; then
+            echo "Flattening wallet folder: $DIR"
+            mv ${DIR}* $HOME/adb_wallet_prod/
+            rmdir $DIR
+          fi
+        done
+
         chmod 600 $HOME/adb_wallet_prod/* || true
 
+        # Write updated sqlnet.ora
         cat > $HOME/adb_wallet_prod/sqlnet.ora <<EOF
-        WALLET_LOCATION = (SOURCE = (METHOD = file)(METHOD_DATA = (DIRECTORY="$HOME/adb_wallet_prod")))
+        WALLET_LOCATION = (SOURCE = (METHOD = file) (METHOD_DATA = (DIRECTORY="$HOME/adb_wallet_prod")))
         SSL_SERVER_DN_MATCH = yes
-
-        TRACE_LEVEL_CLIENT = USER
-        TRACE_DIRECTORY_CLIENT = $HOME/adb_wallet_prod
-        TRACE_FILE_CLIENT = trace_prod.log
-        DIAG_ADR_ENABLED = OFF
         EOF
 
-        echo "--- PROD WALLET CONTENTS ---"
-        ls -R $HOME/adb_wallet_prod
+        echo "--- PROD Wallet files ---"
+        ls -l $HOME/adb_wallet_prod
+        echo "--- PROD sqlnet.ora ---"
+        cat $HOME/adb_wallet_prod/sqlnet.ora
 
-    - name: Show PROD tnsnames.ora
+
+    # Debug steps (PROD)
+    - name: SHOW PROD tnsnames.ora
       run: |
         echo "--- PROD tnsnames.ora ---"
-        cat $HOME/adb_wallet_prod/tnsnames.ora
+        if [ -f "$HOME/adb_wallet_prod/tnsnames.ora" ]; then
+          cat $HOME/adb_wallet_prod/tnsnames.ora
+        else
+          echo "ERROR: tnsnames.ora not found!"
+          ls -l $HOME/adb_wallet_prod
+        fi
 
-    - name: DNS Debug for PROD host
+    - name: EXTRACT & TEST PROD HOST
       run: |
-        PROD_HOST=$(grep -oP '(?<=HOST = ).*(?=\))' $HOME/adb_wallet_prod/tnsnames.ora | head -n1)
-        echo "PROD HOST = $PROD_HOST"
+        if [ -f "$HOME/adb_wallet_prod/tnsnames.ora" ]; then
+          HOST=$(grep -i "HOST=" $HOME/adb_wallet_prod/tnsnames.ora | head -n 1 | sed 's/.*HOST=\([^)]*\).*/\1/')
+          echo "EXTRACTED HOST: $HOST"
+          echo ""
+          echo "Testing DNS..."
+          ping -c 1 $HOST || echo "FAILED: HOST UNREACHABLE"
+        else
+          echo "Cannot extract HOST because tnsnames.ora is missing."
+        fi
 
-        echo "--- nslookup ---"
-        nslookup $PROD_HOST || true
-
-        echo "--- dig ---"
-        dig $PROD_HOST || true
-
-        echo "--- ping ---"
-        ping -c 4 $PROD_HOST || true
-
-    - name: Test SQL Connection (PROD) With Verbose Logs
+    - name: Test SQL Connection (PROD)
       run: |
         export TNS_ADMIN=$HOME/adb_wallet_prod
         export LD_LIBRARY_PATH=$HOME/instantclient_19_27:$LD_LIBRARY_PATH
         export PATH=$HOME/instantclient_19_27:$PATH
 
-        echo "CONNECT STRING = ${{ secrets.ADB_PROD_USER }}/${{ secrets.ADB_PROD_PASSWORD }}@${{ secrets.ADB_PROD_TNS }}"
+        echo "SELECT 'PROD DB OK', SYSDATE FROM dual;" | \
+          sqlplus "${{ secrets.ADB_PROD_USER }}/${{ secrets.ADB_PROD_PASSWORD }}@${{ secrets.ADB_PROD_TNS }}"
 
-        echo "--- WALLET FILES ---"
-        ls -l $TNS_ADMIN
-
-        echo "--- SQLPLUS DEBUG ---"
-        sqlplus -lint -prelim /nolog <<EOF
-        conn ${{ secrets.ADB_PROD_USER }}/${{ secrets.ADB_PROD_PASSWORD }}@${{ secrets.ADB_PROD_TNS }}
-        EOF
-
-        echo "--- TRACE LOG (if exists) ---"
-        cat $HOME/adb_wallet_prod/trace_prod.log || true
 
