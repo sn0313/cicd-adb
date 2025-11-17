@@ -120,4 +120,3 @@ EOF
         export PATH=$HOME/instantclient_19_27:$PATH
 
         echo "SELECT 'PROD DB OK', SYSDATE FROM dual;" | sqlplus "${{ secrets.ADB_PROD_USER }}/${{ secrets.ADB_PROD_PASSWORD }}@${{ secrets.ADB_PROD_TNS }}"
-
