@@ -1,0 +1,99 @@
+name: Test ADB DEV + PROD Connections
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-connection:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Install Oracle Instant Client + SQL*Plus
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libaio1t64 unzip wget
+
+        # Fix missing libaio.so.1 required by Oracle Instant Client
+        sudo ln -s /lib/x86_64-linux-gnu/libaio.so.1t64 /lib/x86_64-linux-gnu/libaio.so.1
+
+        # Download Instant Client
+        wget https://download.oracle.com/otn_software/linux/instantclient/1927000/instantclient-basic-linux.x64-19.27.0.0.0dbru.zip
+        unzip -o instantclient-basic-linux.x64-19.27.0.0.0dbru.zip -d $HOME
+
+        wget https://download.oracle.com/otn_software/linux/instantclient/1927000/instantclient-sqlplus-linux.x64-19.27.0.0.0dbru.zip
+        unzip -o instantclient-sqlplus-linux.x64-19.27.0.0.0dbru.zip -d $HOME
+
+        export LD_LIBRARY_PATH=$HOME/instantclient_19_27:$LD_LIBRARY_PATH
+        export PATH=$HOME/instantclient_19_27:$PATH
+
+        sqlplus -v
+
+    # -------------------------
+    # DEV DATABASE CONNECTION
+    # -------------------------
+    - name: Prepare DEV Wallet (copy from wallet/)
+      run: |
+        mkdir -p $HOME/adb_wallet_dev
+        cp -r $GITHUB_WORKSPACE/wallet/* $HOME/adb_wallet_dev/
+        chmod 600 $HOME/adb_wallet_dev/*
+
+        # Write updated sqlnet.ora
+        cat > $HOME/adb_wallet_dev/sqlnet.ora <<EOF
+        WALLET_LOCATION = (SOURCE = (METHOD = file) (METHOD_DATA = (DIRECTORY="$HOME/adb_wallet_dev")))
+        SSL_SERVER_DN_MATCH = yes
+        EOF
+
+        echo "DEV Wallet files:"
+        ls -l $HOME/adb_wallet_dev
+        echo "--- DEV sqlnet.ora ---"
+        cat $HOME/adb_wallet_dev/sqlnet.ora
+
+    - name: Test SQL Connection (DEV)
+      run: |
+        export TNS_ADMIN=$HOME/adb_wallet_dev
+        export LD_LIBRARY_PATH=$HOME/instantclient_19_27:$LD_LIBRARY_PATH
+        export PATH=$HOME/instantclient_19_27:$PATH
+
+        echo "SELECT 'DEV DB OK', SYSDATE FROM dual;" | sqlplus "${{ secrets.ADB_USER }}/${{ secrets.ADB_PASSWORD }}@${{ secrets.ADB_TNS }}"
+
+
+
+    # -------------------------
+    # PROD DATABASE CONNECTION
+    # -------------------------
+    - name: Prepare PROD Wallet (copy from wallet_prod/)
+      run: |
+        mkdir -p $HOME/adb_wallet_prod
+
+        # If wallet files exist in repo folder
+        cp -r $GITHUB_WORKSPACE/wallet_prod/* $HOME/adb_wallet_prod/ 2>/dev/null || true
+
+        # If Base64 wallet secret exists, decode it (highest priority)
+        if [ -n "${{ secrets.ADB_PROD_WALLET }}" ]; then
+          echo "${{ secrets.ADB_PROD_WALLET }}" | base64 -d > $HOME/prod_wallet.zip
+          unzip -o $HOME/prod_wallet.zip -d $HOME/adb_wallet_prod
+        fi
+
+        chmod 600 $HOME/adb_wallet_prod/* || true
+
+        # Write updated sqlnet.ora
+        cat > $HOME/adb_wallet_prod/sqlnet.ora <<EOF
+        WALLET_LOCATION = (SOURCE = (METHOD = file) (METHOD_DATA = (DIRECTORY="$HOME/adb_wallet_prod")))
+        SSL_SERVER_DN_MATCH = yes
+        EOF
+
+        echo "PROD Wallet files:"
+        ls -l $HOME/adb_wallet_prod
+        echo "--- PROD sqlnet.ora ---"
+        cat $HOME/adb_wallet_prod/sqlnet.ora
+
+    - name: Test SQL Connection (PROD)
+      run: |
+        export TNS_ADMIN=$HOME/adb_wallet_prod
+        export LD_LIBRARY_PATH=$HOME/instantclient_19_27:$LD_LIBRARY_PATH
+        export PATH=$HOME/instantclient_19_27:$PATH
+
+        echo "SELECT 'PROD DB OK', SYSDATE FROM dual;" | sqlplus "${{ secrets.ADB_PROD_USER }}/${{ secrets.ADB_PROD_PASSWORD }}@${{ secrets.ADB_PROD_TNS }}"
