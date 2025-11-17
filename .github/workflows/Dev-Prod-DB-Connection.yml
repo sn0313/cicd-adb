@@ -114,11 +114,14 @@ jobs:
     - name: EXTRACT & TEST PROD HOST
       run: |
         if [ -f "$HOME/adb_wallet_prod/tnsnames.ora" ]; then
-          HOST=$(grep -i "HOST=" $HOME/adb_wallet_prod/tnsnames.ora | head -n 1 | sed 's/.*HOST=\([^)]*\).*/\1/')
+          # Extract only the host, avoids GitHub secret masking
+          HOST=$(grep -oP 'host=\K[^\)]+' $HOME/adb_wallet_prod/tnsnames.ora | head -n 1)
+
           echo "EXTRACTED HOST: $HOST"
           echo ""
           echo "Testing DNS..."
-          ping -c 1 $HOST || echo "FAILED: HOST UNREACHABLE"
+          ping -c 1 "$HOST" || echo "FAILED: HOST UNREACHABLE"
+
         else
           echo "Cannot extract HOST because tnsnames.ora is missing."
         fi
