@@ -40,13 +40,12 @@ jobs:
         cp -r $GITHUB_WORKSPACE/wallet/* $HOME/adb_wallet_dev/
         chmod 600 $HOME/adb_wallet_dev/*
 
-        # Write updated sqlnet.ora
         cat > $HOME/adb_wallet_dev/sqlnet.ora <<EOF
-        WALLET_LOCATION = (SOURCE = (METHOD = file) (METHOD_DATA = (DIRECTORY="$HOME/adb_wallet_dev")))
-        SSL_SERVER_DN_MATCH = yes
-        EOF
+WALLET_LOCATION = (SOURCE = (METHOD = file) (METHOD_DATA = (DIRECTORY="$HOME/adb_wallet_dev")))
+SSL_SERVER_DN_MATCH = yes
+EOF
 
-        echo "DEV Wallet files:"
+        echo "DEV Wallet Files:"
         ls -l $HOME/adb_wallet_dev
         echo "--- DEV sqlnet.ora ---"
         cat $HOME/adb_wallet_dev/sqlnet.ora
@@ -64,14 +63,14 @@ jobs:
     # -------------------------
     # PROD DATABASE CONNECTION
     # -------------------------
-    - name: Prepare PROD Wallet (copy from wallet_prod/)
+    - name: Prepare PROD Wallet
       run: |
         mkdir -p $HOME/adb_wallet_prod
 
-        # If wallet files exist in repo folder
+        # Copy PROD wallet folder if exists
         cp -r $GITHUB_WORKSPACE/wallet_prod/* $HOME/adb_wallet_prod/ 2>/dev/null || true
 
-        # If Base64 wallet secret exists, decode it (highest priority)
+        # Decode BASE64 wallet if provided
         if [ -n "${{ secrets.ADB_PROD_WALLET }}" ]; then
           echo "${{ secrets.ADB_PROD_WALLET }}" | base64 -d > $HOME/prod_wallet.zip
           unzip -o $HOME/prod_wallet.zip -d $HOME/adb_wallet_prod
@@ -79,17 +78,41 @@ jobs:
 
         chmod 600 $HOME/adb_wallet_prod/* || true
 
-        # Write updated sqlnet.ora
         cat > $HOME/adb_wallet_prod/sqlnet.ora <<EOF
-        WALLET_LOCATION = (SOURCE = (METHOD = file) (METHOD_DATA = (DIRECTORY="$HOME/adb_wallet_prod")))
-        SSL_SERVER_DN_MATCH = yes
-        EOF
+WALLET_LOCATION = (SOURCE = (METHOD = file) (METHOD_DATA = (DIRECTORY="$HOME/adb_wallet_prod")))
+SSL_SERVER_DN_MATCH = yes
+EOF
 
-        echo "PROD Wallet files:"
+        echo "PROD Wallet Files:"
         ls -l $HOME/adb_wallet_prod
         echo "--- PROD sqlnet.ora ---"
         cat $HOME/adb_wallet_prod/sqlnet.ora
 
+
+    # -------------------------
+    # PROD DEBUGGING BLOCK
+    # -------------------------
+    - name: Debug PROD TNS Configuration
+      run: |
+        echo "----- PROD tnsnames.ora -----"
+        cat $HOME/adb_wallet_prod/tnsnames.ora || echo "tnsnames.ora NOT FOUND"
+
+        echo ""
+        echo "TNS alias from secret: ${{ secrets.ADB_PROD_TNS }}"
+        echo ""
+
+        # Extract HOST entry from tnsnames.ora
+        HOST=$(grep -i "HOST=" $HOME/adb_wallet_prod/tnsnames.ora | head -n 1 | sed 's/.*HOST=\([^)]*\).*/\1/')
+        echo "Extracted HOST: $HOST"
+
+        echo ""
+        echo "Testing DNS resolution..."
+        ping -c 1 $HOST || echo "FAILED: HOST UNREACHABLE"
+
+
+    # -------------------------
+    # FINAL: Test PROD DB Connection
+    # -------------------------
     - name: Test SQL Connection (PROD)
       run: |
         export TNS_ADMIN=$HOME/adb_wallet_prod
@@ -97,3 +120,4 @@ jobs:
         export PATH=$HOME/instantclient_19_27:$PATH
 
         echo "SELECT 'PROD DB OK', SYSDATE FROM dual;" | sqlplus "${{ secrets.ADB_PROD_USER }}/${{ secrets.ADB_PROD_PASSWORD }}@${{ secrets.ADB_PROD_TNS }}"
+
