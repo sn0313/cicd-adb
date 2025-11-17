@@ -8,115 +8,119 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-    - name: Install Oracle Instant Client + SQL*Plus
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y libaio1t64 unzip wget
+      - name: Install Oracle Instant Client + SQL*Plus
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libaio1t64 unzip wget
 
-        # Fix missing libaio.so.1 required by Oracle Instant Client
-        sudo ln -s /lib/x86_64-linux-gnu/libaio.so.1t64 /lib/x86_64-linux-gnu/libaio.so.1
+          # Fix missing libaio.so.1 required by Oracle Instant Client
+          sudo ln -s /lib/x86_64-linux-gnu/libaio.so.1t64 /lib/x86_64-linux-gnu/libaio.so.1
 
-        # Download Instant Client
-        wget https://download.oracle.com/otn_software/linux/instantclient/1927000/instantclient-basic-linux.x64-19.27.0.0.0dbru.zip
-        unzip -o instantclient-basic-linux.x64-19.27.0.0.0dbru.zip -d $HOME
+          # Download Instant Client
+          wget https://download.oracle.com/otn_software/linux/instantclient/1927000/instantclient-basic-linux.x64-19.27.0.0.0dbru.zip
+          unzip -o instantclient-basic-linux.x64-19.27.0.0.0dbru.zip -d $HOME
 
-        wget https://download.oracle.com/otn_software/linux/instantclient/1927000/instantclient-sqlplus-linux.x64-19.27.0.0.0dbru.zip
-        unzip -o instantclient-sqlplus-linux.x64-19.27.0.0.0dbru.zip -d $HOME
+          wget https://download.oracle.com/otn_software/linux/instantclient/1927000/instantclient-sqlplus-linux.x64-19.27.0.0.0dbru.zip
+          unzip -o instantclient-sqlplus-linux.x64-19.27.0.0.0dbru.zip -d $HOME
 
-        export LD_LIBRARY_PATH=$HOME/instantclient_19_27:$LD_LIBRARY_PATH
-        export PATH=$HOME/instantclient_19_27:$PATH
+          export LD_LIBRARY_PATH=$HOME/instantclient_19_27:$LD_LIBRARY_PATH
+          export PATH=$HOME/instantclient_19_27:$PATH
 
-        sqlplus -v
+          sqlplus -v
 
-    # -------------------------
-    # DEV DATABASE CONNECTION
-    # -------------------------
-    - name: Prepare DEV Wallet (copy from wallet/)
-      run: |
-        mkdir -p $HOME/adb_wallet_dev
-        cp -r $GITHUB_WORKSPACE/wallet/* $HOME/adb_wallet_dev/
-        chmod 600 $HOME/adb_wallet_dev/*
+      # -------------------------
+      # DEV DATABASE CONNECTION
+      # -------------------------
+      - name: Prepare DEV Wallet
+        run: |
+          mkdir -p $HOME/adb_wallet_dev
+          cp -r $GITHUB_WORKSPACE/wallet/* $HOME/adb_wallet_dev/
+          chmod 600 $HOME/adb_wallet_dev/*
 
-        cat > $HOME/adb_wallet_dev/sqlnet.ora <<EOF
+          cat > $HOME/adb_wallet_dev/sqlnet.ora <<EOF
 WALLET_LOCATION = (SOURCE = (METHOD = file) (METHOD_DATA = (DIRECTORY="$HOME/adb_wallet_dev")))
 SSL_SERVER_DN_MATCH = yes
 EOF
 
-        echo "DEV Wallet Files:"
-        ls -l $HOME/adb_wallet_dev
-        echo "--- DEV sqlnet.ora ---"
-        cat $HOME/adb_wallet_dev/sqlnet.ora
+          echo "DEV Wallet Files:"
+          ls -l $HOME/adb_wallet_dev
+          echo "--- DEV sqlnet.ora ---"
+          cat $HOME/adb_wallet_dev/sqlnet.ora
 
-    - name: Test SQL Connection (DEV)
-      run: |
-        export TNS_ADMIN=$HOME/adb_wallet_dev
-        export LD_LIBRARY_PATH=$HOME/instantclient_19_27:$LD_LIBRARY_PATH
-        export PATH=$HOME/instantclient_19_27:$PATH
+      - name: Test SQL Connection (DEV)
+        run: |
+          export TNS_ADMIN=$HOME/adb_wallet_dev
+          export LD_LIBRARY_PATH=$HOME/instantclient_19_27:$LD_LIBRARY_PATH
+          export PATH=$HOME/instantclient_19_27:$PATH
 
-        echo "SELECT 'DEV DB OK', SYSDATE FROM dual;" | sqlplus "${{ secrets.ADB_USER }}/${{ secrets.ADB_PASSWORD }}@${{ secrets.ADB_TNS }}"
+          echo "SELECT 'DEV DB OK', SYSDATE FROM dual;" | sqlplus "${{ secrets.ADB_USER }}/${{ secrets.ADB_PASSWORD }}@${{ secrets.ADB_TNS }}"
 
+      # -------------------------
+      # PROD DATABASE CONNECTION
+      # -------------------------
+      - name: Prepare PROD Wallet
+        run: |
+          mkdir -p $HOME/adb_wallet_prod
 
+          # Copy wallet_prod folder from repo (if exists)
+          cp -r $GITHUB_WORKSPACE/wallet_prod/* $HOME/adb_wallet_prod/ 2>/dev/null || true
 
-    # -------------------------
-    # PROD DATABASE CONNECTION
-    # -------------------------
-    - name: Prepare PROD Wallet
-      run: |
-        mkdir -p $HOME/adb_wallet_prod
+          # Decode Base64 wallet (highest priority)
+          if [ -n "${{ secrets.ADB_PROD_WALLET }}" ]; then
+            echo "${{ secrets.ADB_PROD_WALLET }}" | base64 -d > $HOME/prod_wallet.zip
+            unzip -o $HOME/prod_wallet.zip -d $HOME/adb_wallet_prod
+          fi
 
-        # Copy PROD wallet folder if exists
-        cp -r $GITHUB_WORKSPACE/wallet_prod/* $HOME/adb_wallet_prod/ 2>/dev/null || true
+          chmod 600 $HOME/adb_wallet_prod/* || true
 
-        # Decode BASE64 wallet if provided
-        if [ -n "${{ secrets.ADB_PROD_WALLET }}" ]; then
-          echo "${{ secrets.ADB_PROD_WALLET }}" | base64 -d > $HOME/prod_wallet.zip
-          unzip -o $HOME/prod_wallet.zip -d $HOME/adb_wallet_prod
-        fi
-
-        chmod 600 $HOME/adb_wallet_prod/* || true
-
-        cat > $HOME/adb_wallet_prod/sqlnet.ora <<EOF
+          cat > $HOME/adb_wallet_prod/sqlnet.ora <<EOF
 WALLET_LOCATION = (SOURCE = (METHOD = file) (METHOD_DATA = (DIRECTORY="$HOME/adb_wallet_prod")))
 SSL_SERVER_DN_MATCH = yes
 EOF
 
-        echo "PROD Wallet Files:"
-        ls -l $HOME/adb_wallet_prod
-        echo "--- PROD sqlnet.ora ---"
-        cat $HOME/adb_wallet_prod/sqlnet.ora
+          echo "PROD Wallet Files:"
+          ls -l $HOME/adb_wallet_prod
+          echo "--- PROD sqlnet.ora ---"
+          cat $HOME/adb_wallet_prod/sqlnet.ora
 
+      # -------------------------
+      # PROD DEBUGGING BLOCK
+      # -------------------------
+      - name: Debug PROD TNS Configuration
+        run: |
+          echo "----- PROD tnsnames.ora -----"
+          if [ -f "$HOME/adb_wallet_prod/tnsnames.ora" ]; then
+            cat $HOME/adb_wallet_prod/tnsnames.ora
+          else
+            echo "tnsnames.ora NOT FOUND"
+          fi
 
-    # -------------------------
-    # PROD DEBUGGING BLOCK
-    # -------------------------
-    - name: Debug PROD TNS Configuration
-      run: |
-        echo "----- PROD tnsnames.ora -----"
-        cat $HOME/adb_wallet_prod/tnsnames.ora || echo "tnsnames.ora NOT FOUND"
+          echo ""
+          echo "TNS alias from secret:"
+          echo "${{ secrets.ADB_PROD_TNS }}"
+          echo ""
 
-        echo ""
-        echo "TNS alias from secret: ${{ secrets.ADB_PROD_TNS }}"
-        echo ""
+          # Extract HOST value
+          if [ -f "$HOME/adb_wallet_prod/tnsnames.ora" ]; then
+            HOST=$(grep -i "HOST=" $HOME/adb_wallet_prod/tnsnames.ora | head -n 1 | sed 's/.*HOST=\([^)]*\).*/\1/')
+            echo "Extracted HOST: $HOST"
 
-        # Extract HOST entry from tnsnames.ora
-        HOST=$(grep -i "HOST=" $HOME/adb_wallet_prod/tnsnames.ora | head -n 1 | sed 's/.*HOST=\([^)]*\).*/\1/')
-        echo "Extracted HOST: $HOST"
+            echo ""
+            echo "Testing DNS resolution..."
+            ping -c 1 $HOST || echo "FAILED: HOST UNREACHABLE"
+          fi
 
-        echo ""
-        echo "Testing DNS resolution..."
-        ping -c 1 $HOST || echo "FAILED: HOST UNREACHABLE"
+      # -------------------------
+      # FINAL: PROD DB CONNECTION
+      # -------------------------
+      - name: Test SQL Connection (PROD)
+        run: |
+          export TNS_ADMIN=$HOME/adb_wallet_prod
+          export LD_LIBRARY_PATH=$HOME/instantclient_19_27:$LD_LIBRARY_PATH
+          export PATH=$HOME/instantclient_19_27:$PATH
 
+          echo "SELECT 'PROD DB OK', SYSDATE FROM dual;" | sqlplus "${{ secrets.ADB_PROD_USER }}/${{ secrets.ADB_PROD_PASSWORD }}@${{ secrets.ADB_PROD_TNS }}"
 
-    # -------------------------
-    # FINAL: Test PROD DB Connection
-    # -------------------------
-    - name: Test SQL Connection (PROD)
-      run: |
-        export TNS_ADMIN=$HOME/adb_wallet_prod
-        export LD_LIBRARY_PATH=$HOME/instantclient_19_27:$LD_LIBRARY_PATH
-        export PATH=$HOME/instantclient_19_27:$PATH
-
-        echo "SELECT 'PROD DB OK', SYSDATE FROM dual;" | sqlplus "${{ secrets.ADB_PROD_USER }}/${{ secrets.ADB_PROD_PASSWORD }}@${{ secrets.ADB_PROD_TNS }}"
