@@ -6,8 +6,8 @@ pipeline {
         CHANGE_DIR = 'src/database'      // Root folder for database scripts
         DEV_SCHEMA = 'dev_user_1'
         PROD_SCHEMA = 'prod_user_1'
-        DEV_SERVICE = 'devadb_low'
-        PROD_SERVICE = 'prodadb_low'
+        DEV_SERVICE = 'cicdadb_low'
+        PROD_SERVICE = 'cicdprodadb_low'
     }
 
     stages {
