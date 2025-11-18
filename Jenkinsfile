@@ -6,8 +6,8 @@ pipeline {
         PROD_WALLET = '/var/jenkins_home/wallets/cicd-prod-adb-wallet'
         SQLCL = '/opt/oracle/sqlcl/bin/sql'
         CHANGE_DIR = 'dist/releases/next/changes'
-        SCHEMA_DEV = 'test-1.0/dev_user_1'
-        SCHEMA_PROD = 'test-1.0/prod_user_1'
+        SCHEMA_DEV = 'dev_user_1'
+        SCHEMA_PROD = 'prod_user_1'
     }
 
     stages {
@@ -28,14 +28,15 @@ pipeline {
                                                      usernameVariable: 'DB_USER',
                                                      passwordVariable: 'DB_PSW')]) {
                         sh """
-                        if [ -d "${CHANGE_DIR}/${SCHEMA_DEV}/tables" ]; then
-                            for sqlfile in ${CHANGE_DIR}/${SCHEMA_DEV}/tables/*.sql; do
+                        DEV_PATH="${CHANGE_DIR}/${SCHEMA_DEV}/tables"
+                        if [ -d "\$DEV_PATH" ]; then
+                            for sqlfile in \$DEV_PATH/*.sql; do
                                 [ -f "\$sqlfile" ] || continue
                                 echo "Running \$sqlfile ..."
                                 ${SQLCL} \$DB_USER/\$DB_PSW@\"cicdadb_low\" /nolog @\$sqlfile
                             done
                         else
-                            echo "No changes found for DEV in ${CHANGE_DIR}/${SCHEMA_DEV}/tables"
+                            echo "No changes found for DEV in \$DEV_PATH"
                         fi
                         """
                     }
@@ -52,14 +53,15 @@ pipeline {
                                                      usernameVariable: 'DB_USER',
                                                      passwordVariable: 'DB_PSW')]) {
                         sh """
-                        if [ -d "${CHANGE_DIR}/${SCHEMA_PROD}/tables" ]; then
-                            for sqlfile in ${CHANGE_DIR}/${SCHEMA_PROD}/tables/*.sql; do
+                        PROD_PATH="${CHANGE_DIR}/${SCHEMA_PROD}/tables"
+                        if [ -d "\$PROD_PATH" ]; then
+                            for sqlfile in \$PROD_PATH/*.sql; do
                                 [ -f "\$sqlfile" ] || continue
                                 echo "Running \$sqlfile ..."
                                 ${SQLCL} \$DB_USER/\$DB_PSW@\"cicdprodadb_low\" /nolog @\$sqlfile
                             done
                         else
-                            echo "No changes found for PROD in ${CHANGE_DIR}/${SCHEMA_PROD}/tables"
+                            echo "No changes found for PROD in \$PROD_PATH"
                         fi
                         """
                     }
