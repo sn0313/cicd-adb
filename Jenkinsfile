@@ -4,6 +4,7 @@ pipeline {
     environment {
         SQLCL = '/opt/oracle/sqlcl/bin/sql'
         PROD_SERVICE = 'cicdprodadb_low'
+        ORDS_SCHEMA = 'DEV_USER_1'
     }
 
     stages {
@@ -33,7 +34,7 @@ pipeline {
                     ]) {
 
                         sh """
-                        # Create temporary wallet directory
+                        # Prepare wallet
                         TMP_WALLET_DIR=\$(mktemp -d)
                         unzip -o \$PROD_WALLET_FILE -d \$TMP_WALLET_DIR
                         WALLET_SUBDIR=\$(find \$TMP_WALLET_DIR -mindepth 1 -maxdepth 1 -type d | head -n 1)
@@ -42,13 +43,41 @@ pipeline {
 
                         echo "Deploying all SQL files from dev_user_1 folder to PROD..."
 
-                        # Loop through all SQL files in dev_user_1 folder
-                        for sqlfile in dist/releases/ords/dev_user_1/*.sql; do
-                            if [ -f "\$sqlfile" ]; then
-                                echo "Running SQL file: \$sqlfile"
-                                ${SQLCL} \$DB_USER/\$DB_PSW@${PROD_SERVICE} @\$sqlfile
-                            fi
+                        # Collect SQL files
+                        SQL_FILES=\$(find dist/releases/ords/dev_user_1/ -name '*.sql' | sort)
+                        if [ -z "\$SQL_FILES" ]; then
+                            echo "No SQL files found in dev_user_1 folder."
+                            exit 0
+                        fi
+
+                        # Run deployment in SQLCL
+                        ${SQLCL} /nolog <<EOF
+connect \$DB_USER/\$DB_PSW@${PROD_SERVICE}
+
+-- Disable ORDS schema
+BEGIN
+    ORDS.ENABLE_SCHEMA(p_enabled => FALSE, p_schema => '${ORDS_SCHEMA}');
+END;
+/
+
+-- Run each SQL file
+EOF
+
+                        for sqlfile in \$SQL_FILES; do
+                            echo "Running SQL file: \$sqlfile"
+                            ${SQLCL} \$DB_USER/\$DB_PSW@${PROD_SERVICE} @"\$sqlfile"
                         done
+
+                        ${SQLCL} /nolog <<EOF
+connect \$DB_USER/\$DB_PSW@${PROD_SERVICE}
+
+-- Re-enable ORDS schema
+BEGIN
+    ORDS.ENABLE_SCHEMA(p_enabled => TRUE, p_schema => '${ORDS_SCHEMA}');
+END;
+/
+exit
+EOF
                         """
                     }
                 }
