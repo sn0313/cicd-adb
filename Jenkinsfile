@@ -3,8 +3,8 @@ pipeline {
 
     environment {
         PROD_SERVICE = 'cicdprodadb_low'
-        LIQUIBASE_CLASSPATH = '/opt/oracle/ojdbc8.jar'
-        CHANGELOG_FILE = 'changelog.xml' // Your Liquibase changelog in repo
+        LIQUIBASE_CLASSPATH = 'ojdbc8.jar' // jar is at root of repo
+        CHANGELOG_FILE = 'changelog.xml'   // Your Liquibase changelog in repo
     }
 
     triggers {
@@ -39,9 +39,7 @@ pipeline {
 
                     if (!changedFiles) {
                         echo "No changes detected in dev_user_1 folder. Skipping deployment."
-                        // Mark build as SUCCESS and skip deployment
                         currentBuild.result = 'SUCCESS'
-                        // Exit the script block to prevent further stages
                         return
                     } else {
                         echo "Changed SQL files:\n${changedFiles}"
@@ -78,3 +76,4 @@ pipeline {
         failure { echo 'Pipeline failed.' }
     }
 }
+
