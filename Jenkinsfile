@@ -2,97 +2,92 @@ pipeline {
     agent any
 
     environment {
-        LIQUIBASE_CLASSPATH = 'ojdbc8.jar'   // Make sure ojdbc8.jar is in repo root
-        CHANGELOG_FILE = 'changelog.xml'
-        DB_USER = 'Prod_User_1'
+        PROD_SERVICE = 'cicdprodadb_low' // TNS alias in your wallet
+        CHANGELOG_FILE = 'changelog.xml'  // Your Liquibase changelog
+        LIQUIBASE_CLASSPATH = 'ojdbc8.jar' // JAR uploaded to repo root
+    }
+
+    triggers {
+        // Optional: poll GitHub every 5 minutes
+        pollSCM('H/5 * * * *')
     }
 
     stages {
-        stage('Checkout SCM') {
+
+        stage('Checkout') {
             steps {
-                checkout scm
+                git branch: 'main',
+                    url: 'https://github.com/sn0313/cicd-adb.git',
+                    credentialsId: 'github-token'
             }
         }
 
         stage('Detect Changes') {
             steps {
                 script {
-                    // Get previous and current commit
-                    PREV_COMMIT = sh(script: 'git rev-parse HEAD~1', returnStdout: true).trim()
-                    CURRENT_COMMIT = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+                    // Get previous and current commits
+                    def prevCommit = sh(script: "git rev-parse HEAD~1", returnStdout: true).trim()
+                    def currentCommit = sh(script: "git rev-parse HEAD", returnStdout: true).trim()
+                    echo "Previous commit: ${prevCommit}"
+                    echo "Current commit: ${currentCommit}"
 
-                    echo "Previous commit: ${PREV_COMMIT}"
-                    echo "Current commit: ${CURRENT_COMMIT}"
-
-                    // Check for changes in dev_user_1 folder
-                    CHANGED_FILES = sh(
-                        script: "git diff --name-only ${PREV_COMMIT} ${CURRENT_COMMIT} | grep '^dist/releases/ords/dev_user_1/' || true",
+                    // Detect changes in dev_user_1 folder
+                    def changedFiles = sh(
+                        script: "git diff --name-only ${prevCommit} ${currentCommit} | grep '^dist/releases/ords/dev_user_1/' || true",
                         returnStdout: true
                     ).trim()
 
-                    if (CHANGED_FILES == '') {
+                    if (!changedFiles) {
                         echo "No changes detected in dev_user_1 folder. Skipping deployment."
                         currentBuild.result = 'SUCCESS'
                         return
                     } else {
-                        echo "Detected changes in dev_user_1 folder. Proceeding with deployment."
+                        echo "Changed SQL files:\n${changedFiles}"
                     }
                 }
             }
         }
 
         stage('Deploy to PROD with Liquibase') {
-            when {
-                expression { CHANGED_FILES != '' } // Only run if there are changes
-            }
             steps {
-                input message: 'Deploy to PROD?', ok: 'Deploy'
+                input message: "Deploy to PROD?" // Optional manual approval
 
                 withCredentials([
-                    string(credentialsId: 'DB_PSW', variable: 'DB_PSW'),
-                    file(credentialsId: 'PROD_WALLET_FILE', variable: 'PROD_WALLET_FILE')
+                    usernamePassword(
+                        credentialsId: 'cicd-prod-adb', 
+                        usernameVariable: 'DB_USER', 
+                        passwordVariable: 'DB_PSW'
+                    ),
+                    file(
+                        credentialsId: 'cicd-prod-adb-wallet', 
+                        variable: 'PROD_WALLET_FILE'
+                    )
                 ]) {
-                    script {
-                        // Unzip wallet to temp directory
-                        TMP_WALLET_DIR = sh(script: 'mktemp -d', returnStdout: true).trim()
-                        sh "unzip -o $PROD_WALLET_FILE -d $TMP_WALLET_DIR"
 
-                        // Find wallet subdir if any
-                        WALLET_SUBDIR = sh(script: "find $TMP_WALLET_DIR -mindepth 1 -maxdepth 1 -type d | head -n 1", returnStdout: true).trim()
-                        if (WALLET_SUBDIR == '') {
-                            WALLET_SUBDIR = TMP_WALLET_DIR
-                        }
+                    sh """
+                    # Prepare Oracle Wallet
+                    TMP_WALLET_DIR=\$(mktemp -d)
+                    unzip -o \$PROD_WALLET_FILE -d \$TMP_WALLET_DIR
+                    WALLET_SUBDIR=\$(find \$TMP_WALLET_DIR -mindepth 1 -maxdepth 1 -type d | head -n 1)
+                    [ -z "\$WALLET_SUBDIR" ] && WALLET_SUBDIR=\$TMP_WALLET_DIR
+                    export TNS_ADMIN=\$WALLET_SUBDIR
 
-                        // Export TNS_ADMIN
-                        env.TNS_ADMIN = WALLET_SUBDIR
-
-                        echo "Running Liquibase deployment with SSO wallet..."
-                        sh """
-                            liquibase \
-                                --url=jdbc:oracle:thin:@cicdprodadb_low \
-                                --username=$DB_USER \
-                                --password=$DB_PSW \
-                                --changeLogFile=$CHANGELOG_FILE \
-                                --classpath=$LIQUIBASE_CLASSPATH \
-                                -Doracle.net.wallet_location=$TNS_ADMIN \
-                                update
-                        """
-                    }
+                    echo "Running Liquibase deployment..."
+                    liquibase \
+                      --url=jdbc:oracle:thin:@${PROD_SERVICE}?TNS_ADMIN=\$TNS_ADMIN \
+                      --username=\$DB_USER \
+                      --password=\$DB_PSW \
+                      --changeLogFile=${CHANGELOG_FILE} \
+                      --classpath=${LIQUIBASE_CLASSPATH} \
+                      update
+                    """
                 }
             }
         }
     }
 
     post {
-        success {
-            echo 'Pipeline completed successfully.'
-        }
-        failure {
-            echo 'Pipeline failed.'
-        }
-        always {
-            echo 'Cleaning up workspace...'
-            deleteDir()
-        }
+        success { echo 'Pipeline completed successfully!' }
+        failure { echo 'Pipeline failed.' }
     }
 }
