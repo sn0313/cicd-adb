@@ -1,22 +1,12 @@
-reviewdb_high = (description= (retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=fmbwark3.adb.us-chicago-1.oraclecloud.com))(connect_data=(service_name=g534d1761ccff7f_reviewdb_high.adb.oraclecloud.com))(security=(ssl_server_dn_match=no)))
+cicdprodadb_high = (description= (retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=voooc0lv.adb.ap-singapore-1.oraclecloud.com))(connect_data=(service_name=g534d1761ccff7f_cicdprodadb_high.adb.oraclecloud.com))(security=(ssl_server_dn_match=no)))
 
-reviewdb_low = (description= (retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=fmbwark3.adb.us-chicago-1.oraclecloud.com))(connect_data=(service_name=g534d1761ccff7f_reviewdb_low.adb.oraclecloud.com))(security=(ssl_server_dn_match=no)))
+cicdprodadb_low = (description= (retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=voooc0lv.adb.ap-singapore-1.oraclecloud.com))(connect_data=(service_name=g534d1761ccff7f_cicdprodadb_low.adb.oraclecloud.com))(security=(ssl_server_dn_match=no)))
 
-reviewdb_medium = (description= (retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=fmbwark3.adb.us-chicago-1.oraclecloud.com))(connect_data=(service_name=g534d1761ccff7f_reviewdb_medium.adb.oraclecloud.com))(security=(ssl_server_dn_match=no)))
+cicdprodadb_medium = (description= (retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=voooc0lv.adb.ap-singapore-1.oraclecloud.com))(connect_data=(service_name=g534d1761ccff7f_cicdprodadb_medium.adb.oraclecloud.com))(security=(ssl_server_dn_match=no)))
 
-reviewdb_tp = (description= (retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=fmbwark3.adb.us-chicago-1.oraclecloud.com))(connect_data=(service_name=g534d1761ccff7f_reviewdb_tp.adb.oraclecloud.com))(security=(ssl_server_dn_match=no)))
+cicdprodadb_tp = (description= (retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=voooc0lv.adb.ap-singapore-1.oraclecloud.com))(connect_data=(service_name=g534d1761ccff7f_cicdprodadb_tp.adb.oraclecloud.com))(security=(ssl_server_dn_match=no)))
 
-reviewdb_tpurgent = (description= (retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=fmbwark3.adb.us-chicago-1.oraclecloud.com))(connect_data=(service_name=g534d1761ccff7f_reviewdb_tpurgent.adb.oraclecloud.com))(security=(ssl_server_dn_match=no)))
-
-reviewdb_public_high = (description= (retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=adb.us-chicago-1.oraclecloud.com))(connect_data=(service_name=g534d1761ccff7f_reviewdb_high.adb.oraclecloud.com))(security=(ssl_server_dn_match=yes)))
-
-reviewdb_public_low = (description= (retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=adb.us-chicago-1.oraclecloud.com))(connect_data=(service_name=g534d1761ccff7f_reviewdb_low.adb.oraclecloud.com))(security=(ssl_server_dn_match=yes)))
-
-reviewdb_public_medium = (description= (retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=adb.us-chicago-1.oraclecloud.com))(connect_data=(service_name=g534d1761ccff7f_reviewdb_medium.adb.oraclecloud.com))(security=(ssl_server_dn_match=yes)))
-
-reviewdb_public_tp = (description= (retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=adb.us-chicago-1.oraclecloud.com))(connect_data=(service_name=g534d1761ccff7f_reviewdb_tp.adb.oraclecloud.com))(security=(ssl_server_dn_match=yes)))
-
-reviewdb_public_tpurgent = (description= (retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=adb.us-chicago-1.oraclecloud.com))(connect_data=(service_name=g534d1761ccff7f_reviewdb_tpurgent.adb.oraclecloud.com))(security=(ssl_server_dn_match=yes)))
+cicdprodadb_tpurgent = (description= (retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=voooc0lv.adb.ap-singapore-1.oraclecloud.com))(connect_data=(service_name=g534d1761ccff7f_cicdprodadb_tpurgent.adb.oraclecloud.com))(security=(ssl_server_dn_match=no)))
 
 
 
