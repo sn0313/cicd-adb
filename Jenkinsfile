@@ -87,7 +87,12 @@ EOF
                         sh """
                         TMP_WALLET_DIR=\$(mktemp -d)
                         unzip -o \$PROD_WALLET_FILE -d \$TMP_WALLET_DIR
+
+                        # Fix: Use TMP_WALLET_DIR directly if there is no subfolder
                         WALLET_SUBDIR=\$(find \$TMP_WALLET_DIR -mindepth 1 -maxdepth 1 -type d | head -n 1)
+                        if [ -z "\$WALLET_SUBDIR" ]; then
+                            WALLET_SUBDIR=\$TMP_WALLET_DIR
+                        fi
                         export TNS_ADMIN=\$WALLET_SUBDIR
 
                         SCHEMA_PATH="${CHANGE_DIR}/${PROD_SCHEMA}/tables"
@@ -106,7 +111,7 @@ EOF
 EOF
                             done
                         else
-                            echo "❌ No PROD folder found at \$SCHEMA_PATH"
+                            echo "No PROD folder found at \$SCHEMA_PATH"
                         fi
                         """
                     }
