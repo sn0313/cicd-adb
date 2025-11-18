@@ -2,8 +2,8 @@ pipeline {
     agent any
 
     environment {
-        DEV_USERNAME = credentials('dev-adb')
-        PROD_USERNAME = credentials('prod-adb')
+        DEV_USERNAME = credentials('3086a9e1-0196-41a4-ace4-12b7673da99b')
+        PROD_USERNAME = credentials('cicd-prod-adb')
         DEV_WALLET = '/var/jenkins_home/wallets/cicd-adb-wallet'
         PROD_WALLET = '/var/jenkins_home/wallets/cicd-prod-adb-wallet'
         SQLCL = '/opt/oracle/sqlcl/bin/sql'
