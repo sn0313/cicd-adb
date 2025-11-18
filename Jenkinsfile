@@ -2,13 +2,13 @@ pipeline {
     agent any
 
     environment {
-        PROD_SERVICE = 'cicdprodadb_low'
-        LIQUIBASE_CLASSPATH = 'ojdbc8.jar' // jar is at root of repo
-        CHANGELOG_FILE = 'changelog.xml'   // Your Liquibase changelog in repo
+        PROD_SERVICE = 'cicdprodadb_low' // TNS alias in your wallet
+        CHANGELOG_FILE = 'changelog.xml'  // Your Liquibase changelog
+        LIQUIBASE_CLASSPATH = 'ojdbc8.jar' // JAR uploaded to repo root
     }
 
     triggers {
-        // Poll GitHub for changes every 5 minutes
+        // Optional: poll GitHub every 5 minutes
         pollSCM('H/5 * * * *')
     }
 
@@ -51,20 +51,35 @@ pipeline {
         stage('Deploy to PROD with Liquibase') {
             steps {
                 input message: "Deploy to PROD?" // Optional manual approval
-                withCredentials([usernamePassword(
-                    credentialsId: 'cicd-prod-adb',
-                    usernameVariable: 'DB_USER',
-                    passwordVariable: 'DB_PSW'
-                )]) {
+
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'cicd-prod-adb', 
+                        usernameVariable: 'DB_USER', 
+                        passwordVariable: 'DB_PSW'
+                    ),
+                    file(
+                        credentialsId: 'cicd-prod-adb-wallet', 
+                        variable: 'PROD_WALLET_FILE'
+                    )
+                ]) {
+
                     sh """
-                        echo "Running Liquibase deployment..."
-                        liquibase \
-                          --url=jdbc:oracle:thin:@${PROD_SERVICE} \
-                          --username=$DB_USER \
-                          --password=$DB_PSW \
-                          --changeLogFile=${CHANGELOG_FILE} \
-                          --classpath=${LIQUIBASE_CLASSPATH} \
-                          update
+                    # Prepare Oracle Wallet
+                    TMP_WALLET_DIR=\$(mktemp -d)
+                    unzip -o \$PROD_WALLET_FILE -d \$TMP_WALLET_DIR
+                    WALLET_SUBDIR=\$(find \$TMP_WALLET_DIR -mindepth 1 -maxdepth 1 -type d | head -n 1)
+                    [ -z "\$WALLET_SUBDIR" ] && WALLET_SUBDIR=\$TMP_WALLET_DIR
+                    export TNS_ADMIN=\$WALLET_SUBDIR
+
+                    echo "Running Liquibase deployment..."
+                    liquibase \
+                      --url=jdbc:oracle:thin:@${PROD_SERVICE}?TNS_ADMIN=\$TNS_ADMIN \
+                      --username=\$DB_USER \
+                      --password=\$DB_PSW \
+                      --changeLogFile=${CHANGELOG_FILE} \
+                      --classpath=${LIQUIBASE_CLASSPATH} \
+                      update
                     """
                 }
             }
@@ -76,4 +91,3 @@ pipeline {
         failure { echo 'Pipeline failed.' }
     }
 }
-
