@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         SQLCL = '/opt/oracle/sqlcl/bin/sql'
-        CHANGE_DIR = 'src/database'      // Root folder for database scripts
+        CHANGE_DIR = 'src/database'      // Root path for SQL scripts
         DEV_SCHEMA = 'dev_user_1'
         PROD_SCHEMA = 'prod_user_1'
         DEV_SERVICE = 'cicdadb_low'
@@ -29,14 +29,20 @@ pipeline {
                             usernameVariable: 'DB_USER',
                             passwordVariable: 'DB_PSW'
                         ),
-                        file(credentialsId: 'cicd-adb-wallet', variable: 'DEV_WALLET_FILE')
+                        file(
+                            credentialsId: 'cicd-adb-wallet',
+                            variable: 'DEV_WALLET_FILE'
+                        )
                     ]) {
+
                         sh """
-                        # Create temporary folder for wallet
+                        # Create temp dir for wallet
                         TMP_WALLET_DIR=\$(mktemp -d)
                         unzip -o \$DEV_WALLET_FILE -d \$TMP_WALLET_DIR
 
-                        export TNS_ADMIN=\$TMP_WALLET_DIR
+                        # Find the actual wallet folder inside the ZIP
+                        WALLET_SUBDIR=\$(find \$TMP_WALLET_DIR -mindepth 1 -maxdepth 1 -type d | head -n 1)
+                        export TNS_ADMIN=\$WALLET_SUBDIR
 
                         SCHEMA_PATH="${CHANGE_DIR}/${DEV_SCHEMA}/tables"
 
@@ -48,9 +54,9 @@ pipeline {
                                 echo "Running: \$sqlfile"
 
                                 ${SQLCL} /nolog <<EOF
-connect \$DB_USER/\$DB_PSW@${DEV_SERVICE}
-@\${sqlfile}
-exit;
+                                connect \$DB_USER/\$DB_PSW@${DEV_SERVICE}
+                                @\$sqlfile
+                                exit;
 EOF
                             done
                         else
@@ -72,13 +78,17 @@ EOF
                             usernameVariable: 'DB_USER',
                             passwordVariable: 'DB_PSW'
                         ),
-                        file(credentialsId: 'cicd-prod-adb-wallet', variable: 'PROD_WALLET_FILE')
+                        file(
+                            credentialsId: 'cicd-prod-adb-wallet',
+                            variable: 'PROD_WALLET_FILE'
+                        )
                     ]) {
+
                         sh """
                         TMP_WALLET_DIR=\$(mktemp -d)
                         unzip -o \$PROD_WALLET_FILE -d \$TMP_WALLET_DIR
-
-                        export TNS_ADMIN=\$TMP_WALLET_DIR
+                        WALLET_SUBDIR=\$(find \$TMP_WALLET_DIR -mindepth 1 -maxdepth 1 -type d | head -n 1)
+                        export TNS_ADMIN=\$WALLET_SUBDIR
 
                         SCHEMA_PATH="${CHANGE_DIR}/${PROD_SCHEMA}/tables"
 
@@ -90,9 +100,9 @@ EOF
                                 echo "Running: \$sqlfile"
 
                                 ${SQLCL} /nolog <<EOF
-connect \$DB_USER/\$DB_PSW@${PROD_SERVICE}
-@\${sqlfile}
-exit;
+                                connect \$DB_USER/\$DB_PSW@${PROD_SERVICE}
+                                @\$sqlfile
+                                exit;
 EOF
                             done
                         else
