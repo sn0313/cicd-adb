@@ -4,6 +4,7 @@ pipeline {
     environment {
         SQLCL = '/opt/oracle/sqlcl/bin/sql'
         PROD_SERVICE = 'cicdprodadb_low'
+        DEV_SCHEMA_FOLDER = 'src/database/dev_user_1'
     }
 
     stages {
@@ -39,25 +40,24 @@ pipeline {
                         [ -z "\$WALLET_SUBDIR" ] && WALLET_SUBDIR=\$TMP_WALLET_DIR
                         export TNS_ADMIN=\$WALLET_SUBDIR
 
-                        echo "Deploying changed SQL files to PROD..."
+                        echo "Detecting SQL changes in the dev_user_1 folder..."
 
-                        # Detect SQL files changed in last merge or commit
-                        CHANGED_FILES=\$(git diff --name-only HEAD~1 HEAD | grep -E '\\.sql\$' || true)
+                        # Detect all changed SQL files in the dev_user_1 folder since last commit
+                        CHANGED_FILES=\$(git diff --name-only origin/main..HEAD | grep '^${DEV_SCHEMA_FOLDER}/' | grep -E '\\.sql\$' || true)
 
                         if [ -z "\$CHANGED_FILES" ]; then
-                            echo "No SQL changes detected."
+                            echo "No SQL changes detected in ${DEV_SCHEMA_FOLDER}."
                         else
                             for sqlfile in \$CHANGED_FILES; do
-                                echo "Running SQL file: \$sqlfile"
+                                echo "Deploying SQL file: \$sqlfile"
 
                                 ${SQLCL} /nolog <<EOF
                                 connect \$DB_USER/\$DB_PSW@${PROD_SERVICE}
+
                                 BEGIN
-                                    EXECUTE IMMEDIATE ' ' || REPLACE( 
-                                        REPLACE( REPLACE( 
-                                        REPLACE( REPLACE( 
-                                        REPLACE( @\$sqlfile, '\n', ' '), '\r', ' '), '"', '""'), '''', '\'''), ';', ''), '/', '') 
-                                    ;
+                                    EXECUTE IMMEDIATE q'[
+                                        @\$sqlfile
+                                    ]';
                                 EXCEPTION
                                     WHEN OTHERS THEN
                                         IF SQLCODE != -955 THEN -- ignore 'table already exists'
