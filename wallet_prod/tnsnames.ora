@@ -1,0 +1,12 @@
+cicdprodadb_high = (description= (retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=voooc0lv.adb.ap-singapore-1.oraclecloud.com))(connect_data=(service_name=g534d1761ccff7f_cicdprodadb_high.adb.oraclecloud.com))(security=(ssl_server_dn_match=no)))
+
+cicdprodadb_low = (description= (retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=voooc0lv.adb.ap-singapore-1.oraclecloud.com))(connect_data=(service_name=g534d1761ccff7f_cicdprodadb_low.adb.oraclecloud.com))(security=(ssl_server_dn_match=no)))
+
+cicdprodadb_medium = (description= (retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=voooc0lv.adb.ap-singapore-1.oraclecloud.com))(connect_data=(service_name=g534d1761ccff7f_cicdprodadb_medium.adb.oraclecloud.com))(security=(ssl_server_dn_match=no)))
+
+cicdprodadb_tp = (description= (retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=voooc0lv.adb.ap-singapore-1.oraclecloud.com))(connect_data=(service_name=g534d1761ccff7f_cicdprodadb_tp.adb.oraclecloud.com))(security=(ssl_server_dn_match=no)))
+
+cicdprodadb_tpurgent = (description= (retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1522)(host=voooc0lv.adb.ap-singapore-1.oraclecloud.com))(connect_data=(service_name=g534d1761ccff7f_cicdprodadb_tpurgent.adb.oraclecloud.com))(security=(ssl_server_dn_match=no)))
+
+
+

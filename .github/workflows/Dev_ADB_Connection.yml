@@ -1,0 +1,66 @@
+name: Test ADB Connection
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-connection:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Install Oracle Instant Client + SQL*Plus
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libaio1t64 unzip wget
+
+        # Fix missing libaio.so.1 required by Oracle Instant Client
+        sudo ln -s /lib/x86_64-linux-gnu/libaio.so.1t64 /lib/x86_64-linux-gnu/libaio.so.1
+
+        # Download Instant Client
+        wget https://download.oracle.com/otn_software/linux/instantclient/1927000/instantclient-basic-linux.x64-19.27.0.0.0dbru.zip
+        unzip -o instantclient-basic-linux.x64-19.27.0.0.0dbru.zip -d $HOME
+
+        wget https://download.oracle.com/otn_software/linux/instantclient/1927000/instantclient-sqlplus-linux.x64-19.27.0.0.0dbru.zip
+        unzip -o instantclient-sqlplus-linux.x64-19.27.0.0.0dbru.zip -d $HOME
+
+        export LD_LIBRARY_PATH=$HOME/instantclient_19_27:$LD_LIBRARY_PATH
+        export PATH=$HOME/instantclient_19_27:$PATH
+
+        sqlplus -v
+
+    - name: Prepare Wallet (copy from repo + fix sqlnet.ora)
+      run: |
+        mkdir -p $HOME/adb_wallet
+        cp -r $GITHUB_WORKSPACE/wallet/* $HOME/adb_wallet/
+        chmod 600 $HOME/adb_wallet/*
+
+        # Overwrite sqlnet.ora to point to correct wallet folder
+        cat > $HOME/adb_wallet/sqlnet.ora <<EOF
+        WALLET_LOCATION = (SOURCE = (METHOD = file) (METHOD_DATA = (DIRECTORY="$HOME/adb_wallet")))
+        SSL_SERVER_DN_MATCH = yes
+        EOF
+
+        echo "Wallet files:"
+        ls -l $HOME/adb_wallet
+
+        echo "--- Updated sqlnet.ora ---"
+        cat $HOME/adb_wallet/sqlnet.ora
+
+
+    - name: Test SQL Connection
+      run: |
+        export TNS_ADMIN=$HOME/adb_wallet
+        export LD_LIBRARY_PATH=$HOME/instantclient_19_27:$LD_LIBRARY_PATH
+        export PATH=$HOME/instantclient_19_27:$PATH
+
+        echo "SELECT SYSDATE FROM dual;" | sqlplus "${{ secrets.ADB_USER }}/${{ secrets.ADB_PASSWORD }}@${{ secrets.ADB_TNS }}"
+
+        export PATH=$HOME/instantclient_19_27:$PATH
+
+
+
+
+
