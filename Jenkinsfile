@@ -8,8 +8,8 @@ pipeline {
     }
 
     triggers {
-        // Poll GitHub for changes (alternatively, configure webhook in GitHub)
-        pollSCM('H/5 * * * *') // every 5 minutes
+        // Poll GitHub for changes every 5 minutes
+        pollSCM('H/5 * * * *')
     }
 
     stages {
@@ -25,24 +25,26 @@ pipeline {
         stage('Detect Changes') {
             steps {
                 script {
-                    // Compare current HEAD with previous main commit
-                    PREV_COMMIT = sh(script: "git rev-parse HEAD~1", returnStdout: true).trim()
-                    CURRENT_COMMIT = sh(script: "git rev-parse HEAD", returnStdout: true).trim()
-                    echo "Previous commit: ${PREV_COMMIT}"
-                    echo "Current commit: ${CURRENT_COMMIT}"
+                    // Get previous and current commits
+                    def prevCommit = sh(script: "git rev-parse HEAD~1", returnStdout: true).trim()
+                    def currentCommit = sh(script: "git rev-parse HEAD", returnStdout: true).trim()
+                    echo "Previous commit: ${prevCommit}"
+                    echo "Current commit: ${currentCommit}"
 
-                    // Detect files changed in dev_user_1 folder
-                    CHANGED_FILES = sh(
-                        script: "git diff --name-only ${PREV_COMMIT} ${CURRENT_COMMIT} | grep '^dist/releases/ords/dev_user_1/' || true",
+                    // Detect changes in dev_user_1 folder
+                    def changedFiles = sh(
+                        script: "git diff --name-only ${prevCommit} ${currentCommit} | grep '^dist/releases/ords/dev_user_1/' || true",
                         returnStdout: true
                     ).trim()
 
-                    if (!CHANGED_FILES) {
+                    if (!changedFiles) {
                         echo "No changes detected in dev_user_1 folder. Skipping deployment."
+                        // Mark build as SUCCESS and skip deployment
                         currentBuild.result = 'SUCCESS'
-                        error("No relevant changes")
+                        // Exit the script block to prevent further stages
+                        return
                     } else {
-                        echo "Changed SQL files:\n${CHANGED_FILES}"
+                        echo "Changed SQL files:\n${changedFiles}"
                     }
                 }
             }
@@ -50,7 +52,7 @@ pipeline {
 
         stage('Deploy to PROD with Liquibase') {
             steps {
-                input message: "Deploy to PROD?" // optional manual approval
+                input message: "Deploy to PROD?" // Optional manual approval
                 withCredentials([usernamePassword(
                     credentialsId: 'cicd-prod-adb',
                     usernameVariable: 'DB_USER',
@@ -72,7 +74,7 @@ pipeline {
     }
 
     post {
-        success { echo 'PROD deployment completed successfully!' }
-        failure { echo 'PROD deployment failed.' }
+        success { echo 'Pipeline completed successfully!' }
+        failure { echo 'Pipeline failed.' }
     }
 }
