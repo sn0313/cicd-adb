@@ -2,14 +2,16 @@ pipeline {
     agent any
 
     environment {
-        DEV_WALLET = '/var/jenkins_home/wallets/cicd-adb-wallet'
+        DEV_WALLET  = '/var/jenkins_home/wallets/cicd-adb-wallet'
         PROD_WALLET = '/var/jenkins_home/wallets/cicd-prod-adb-wallet'
-        SQLCL = '/opt/oracle/sqlcl/bin/sql'
-        CHANGE_DIR = 'src/database'      // UPDATED ROOT PATH
-        DEV_SCHEMA = 'dev_user_1'
+        SQLCL       = '/opt/oracle/sqlcl/bin/sql'
+
+        CHANGE_DIR  = 'src/database'        // Correct folder root
+        DEV_SCHEMA  = 'dev_user_1'
         PROD_SCHEMA = 'prod_user_1'
-        DEV_SERVICE = 'devadb_low'
-        PROD_SERVICE = 'prodadb_low'
+
+        DEV_SERVICE  = 'cicdadb_low'
+        PROD_SERVICE = 'cicdadbprodadb_low'
     }
 
     stages {
@@ -34,22 +36,23 @@ pipeline {
                         sh """
                         export TNS_ADMIN=${DEV_WALLET}
 
-                        SCHEMA_PATH="${CHANGE_DIR}/${DEV_SCHEMA}"    # UPDATED
+                        SCHEMA_PATH="${CHANGE_DIR}/${DEV_SCHEMA}/tables"
+
+                        echo "Looking for DEV SQL files in: \$SCHEMA_PATH"
 
                         if [ -d "\$SCHEMA_PATH" ]; then
                             for sqlfile in \$SCHEMA_PATH/*.sql; do
                                 [ -f "\$sqlfile" ] || continue
-                                echo "Running \$sqlfile ..."
+                                echo "Running: \$sqlfile"
 
                                 ${SQLCL} /nolog <<EOF
                                 connect \$DB_USER/\$DB_PSW@${DEV_SERVICE}
                                 @\$sqlfile
                                 exit;
 EOF
-
                             done
                         else
-                            echo "No DEV changes found in \$SCHEMA_PATH"
+                            echo "❌ No DEV folder found at \$SCHEMA_PATH"
                         fi
                         """
                     }
@@ -60,6 +63,7 @@ EOF
         stage('Deploy to PROD') {
             steps {
                 input message: "Deploy to PROD?"
+
                 script {
                     withCredentials([usernamePassword(
                         credentialsId: 'cicd-prod-adb',
@@ -70,22 +74,23 @@ EOF
                         sh """
                         export TNS_ADMIN=${PROD_WALLET}
 
-                        SCHEMA_PATH="${CHANGE_DIR}/${PROD_SCHEMA}"   # UPDATED
+                        SCHEMA_PATH="${CHANGE_DIR}/${PROD_SCHEMA}/tables"
+
+                        echo "Looking for PROD SQL files in: \$SCHEMA_PATH"
 
                         if [ -d "\$SCHEMA_PATH" ]; then
                             for sqlfile in \$SCHEMA_PATH/*.sql; do
                                 [ -f "\$sqlfile" ] || continue
-                                echo "Running \$sqlfile ..."
+                                echo "Running: \$sqlfile"
 
                                 ${SQLCL} /nolog <<EOF
                                 connect \$DB_USER/\$DB_PSW@${PROD_SERVICE}
                                 @\$sqlfile
                                 exit;
 EOF
-
                             done
                         else
-                            echo "No PROD changes found in \$SCHEMA_PATH"
+                            echo "❌ No PROD folder found at \$SCHEMA_PATH"
                         fi
                         """
                     }
@@ -99,5 +104,3 @@ EOF
         failure { echo 'Deployment failed.' }
     }
 }
-
-
