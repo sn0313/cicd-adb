@@ -2,8 +2,8 @@ pipeline {
     agent any
 
     environment {
-        DEV_WALLET = '/var/jenkins_home/wallets/dev-wallet'
-        PROD_WALLET = '/var/jenkins_home/wallets/prod-wallet'
+        DEV_WALLET = '/var/jenkins_home/wallets/cicd-adb-wallet'
+        PROD_WALLET = '/var/jenkins_home/wallets/cicd-prod-adb-wallet'
         SQLCL = '/opt/oracle/sqlcl/bin/sql'
         CHANGE_DIR = 'dist/releases/next/changes'
         DEV_SCHEMA = 'dev_user_1'
@@ -26,7 +26,7 @@ pipeline {
             steps {
                 script {
                     withCredentials([usernamePassword(
-                        credentialsId: 'dev-db-creds',
+                        credentialsId: '3086a9e1-0196-41a4-ace4-12b7673da99b',
                         usernameVariable: 'DB_USER',
                         passwordVariable: 'DB_PSW'
                     )]) {
@@ -62,7 +62,7 @@ EOF
                 input message: "Deploy to PROD?"
                 script {
                     withCredentials([usernamePassword(
-                        credentialsId: 'prod-db-creds',
+                        credentialsId: 'cicd-prod-adb',
                         usernameVariable: 'DB_USER',
                         passwordVariable: 'DB_PSW'
                     )]) {
