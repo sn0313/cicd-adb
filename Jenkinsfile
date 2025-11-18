@@ -2,13 +2,14 @@ pipeline {
     agent any
 
     environment {
-        PROD_SERVICE = 'cicdprodadb_low' // TNS alias in your wallet
-        CHANGELOG_FILE = 'changelog.xml'  // Your Liquibase changelog
-        LIQUIBASE_CLASSPATH = 'ojdbc8.jar' // JDBC driver
+        PROD_SERVICE = 'cicdprodadb_low'
+        LIQUIBASE_CLASSPATH = '/opt/oracle/ojdbc8.jar'
+        CHANGELOG_FILE = 'changelog.xml' // Your Liquibase changelog in repo
     }
 
     triggers {
-        pollSCM('H/5 * * * *') // Optional: poll GitHub every 5 minutes
+        // Poll GitHub for changes (alternatively, configure webhook in GitHub)
+        pollSCM('H/5 * * * *') // every 5 minutes
     }
 
     stages {
@@ -24,78 +25,54 @@ pipeline {
         stage('Detect Changes') {
             steps {
                 script {
-                    // Get previous and current commits
-                    def prevCommit = sh(script: "git rev-parse HEAD~1", returnStdout: true).trim()
-                    def currentCommit = sh(script: "git rev-parse HEAD", returnStdout: true).trim()
-                    echo "Previous commit: ${prevCommit}"
-                    echo "Current commit: ${currentCommit}"
+                    // Compare current HEAD with previous main commit
+                    PREV_COMMIT = sh(script: "git rev-parse HEAD~1", returnStdout: true).trim()
+                    CURRENT_COMMIT = sh(script: "git rev-parse HEAD", returnStdout: true).trim()
+                    echo "Previous commit: ${PREV_COMMIT}"
+                    echo "Current commit: ${CURRENT_COMMIT}"
 
-                    // Detect changes in dev_user_1 folder
-                    def changedFiles = sh(
-                        script: "git diff --name-only ${prevCommit} ${currentCommit} | grep '^dist/releases/ords/dev_user_1/' || true",
+                    // Detect files changed in dev_user_1 folder
+                    CHANGED_FILES = sh(
+                        script: "git diff --name-only ${PREV_COMMIT} ${CURRENT_COMMIT} | grep '^dist/releases/ords/dev_user_1/' || true",
                         returnStdout: true
                     ).trim()
 
-                    if (!changedFiles) {
+                    if (!CHANGED_FILES) {
                         echo "No changes detected in dev_user_1 folder. Skipping deployment."
                         currentBuild.result = 'SUCCESS'
-                        return
+                        error("No relevant changes")
                     } else {
-                        echo "Changed SQL files:\n${changedFiles}"
+                        echo "Changed SQL files:\n${CHANGED_FILES}"
                     }
                 }
             }
         }
 
         stage('Deploy to PROD with Liquibase') {
-            when {
-                expression { currentBuild.result != 'SUCCESS' } // Run only if there are changes
-            }
             steps {
-                input message: "Deploy to PROD?"
-
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'prod-adb-creds', 
-                        usernameVariable: 'DB_USER', 
-                        passwordVariable: 'DB_PSW'
-                    ),
-                    file(
-                        credentialsId: 'prod-adb-wallet', 
-                        variable: 'PROD_WALLET_FILE'
-                    )
-                ]) {
-
-                    script {
-                        // Unzip wallet to temp directory
-                        def tmpWalletDir = sh(script: 'mktemp -d', returnStdout: true).trim()
-                        sh "unzip -o $PROD_WALLET_FILE -d $tmpWalletDir"
-
-                        // Set TNS_ADMIN to the wallet folder
-                        env.TNS_ADMIN = tmpWalletDir
-                        
+                input message: "Deploy to PROD?" // optional manual approval
+                withCredentials([usernamePassword(
+                    credentialsId: 'cicd-prod-adb',
+                    usernameVariable: 'DB_USER',
+                    passwordVariable: 'DB_PSW'
+                )]) {
+                    sh """
                         echo "Running Liquibase deployment..."
-                        sh """
                         liquibase \
-                            --url=jdbc:oracle:thin:@${PROD_SERVICE} \
-                            --username=$DB_USER \
-                            --password=$DB_PSW \
-                            --changeLogFile=${CHANGELOG_FILE} \
-                            --classpath=${LIQUIBASE_CLASSPATH} \
-                            update
-                        """
-                    }
+                          --url=jdbc:oracle:thin:@${PROD_SERVICE} \
+                          --username=$DB_USER \
+                          --password=$DB_PSW \
+                          --changeLogFile=${CHANGELOG_FILE} \
+                          --classpath=${LIQUIBASE_CLASSPATH} \
+                          update
+                    """
                 }
             }
         }
     }
 
     post {
-        success { echo 'Pipeline completed successfully!' }
-        failure { echo 'Pipeline failed.' }
-        always {
-            echo 'Cleaning up workspace...'
-            deleteDir()
-        }
+        success { echo 'PROD deployment completed successfully!' }
+        failure { echo 'PROD deployment failed.' }
     }
 }
