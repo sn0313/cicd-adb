@@ -1,76 +1,92 @@
 pipeline {
     agent any
+
     environment {
-        TNS_ADMIN = '/tmp/tmp_wallet_dir' // will be set dynamically
-        PROD_USER = 'Prod_User_1'
-        PROD_DB = 'cicdprodadb_low'
-        PROD_PSW = credentials('prod-db-password') // Jenkins credential
-        PROD_WALLET_FILE = credentials('prod-wallet-file') // Jenkins credential
+        SQLCL = '/opt/oracle/sqlcl/bin/sql'
+        PROD_SERVICE = 'cicdprodadb_low'
+        ORDS_SCHEMA = 'DEV_USER_1'
     }
+
     stages {
+
         stage('Checkout') {
             steps {
-                checkout scm
+                git branch: 'main',
+                    url: 'https://github.com/sn0313/cicd-adb.git',
+                    credentialsId: 'github-token'
             }
         }
+
         stage('Deploy to PROD') {
             steps {
-                input "Deploy to PROD?"
+                input message: "Deploy to PROD?"
                 script {
-                    // Unzip wallet
-                    sh '''
-                        TMP_WALLET_DIR=$(mktemp -d)
-                        unzip -o $PROD_WALLET_FILE -d $TMP_WALLET_DIR
-                        export TNS_ADMIN=$TMP_WALLET_DIR
-                    '''
+                    withCredentials([
+                        usernamePassword(
+                            credentialsId: 'cicd-prod-adb',
+                            usernameVariable: 'DB_USER',
+                            passwordVariable: 'DB_PSW'
+                        ),
+                        file(
+                            credentialsId: 'cicd-prod-adb-wallet',
+                            variable: 'PROD_WALLET_FILE'
+                        )
+                    ]) {
 
-                    // Find all SQL files in dev_user_1
-                    def sqlFiles = sh(script: "find dist/releases/ords/dev_user_1/ -name '*.sql' | sort", returnStdout: true).trim()
-
-                    if (sqlFiles) {
-                        echo "Deploying SQL files:\n${sqlFiles}"
-
-                        // Build a SQL script to disable schema, run all SQLs, then enable schema
-                        def deploymentScript = sqlFiles.split("\n").collect { file ->
-                            return "@${file}"
-                        }.join('\n')
-
-                        writeFile file: 'deploy_all.sql', text: """
-                        BEGIN
-                            -- Disable ORDS schema first
-                            ORDS.ENABLE_SCHEMA(
-                                p_enabled => FALSE,
-                                p_schema  => '${PROD_USER}',
-                                p_url_mapping_type => 'BASE_PATH'
-                            );
-                        END;
-                        /
-                        ${deploymentScript}
-                        BEGIN
-                            -- Re-enable ORDS schema
-                            ORDS.ENABLE_SCHEMA(
-                                p_enabled => TRUE,
-                                p_schema  => '${PROD_USER}',
-                                p_url_mapping_type => 'BASE_PATH'
-                            );
-                        END;
-                        /
-                        """
-
-                        // Execute SQLCL
                         sh """
-                        /opt/oracle/sqlcl/bin/sql ${PROD_USER}/${PROD_PSW}@${PROD_DB} @deploy_all.sql
+                        # Prepare wallet
+                        TMP_WALLET_DIR=\$(mktemp -d)
+                        unzip -o \$PROD_WALLET_FILE -d \$TMP_WALLET_DIR
+                        WALLET_SUBDIR=\$(find \$TMP_WALLET_DIR -mindepth 1 -maxdepth 1 -type d | head -n 1)
+                        [ -z "\$WALLET_SUBDIR" ] && WALLET_SUBDIR=\$TMP_WALLET_DIR
+                        export TNS_ADMIN=\$WALLET_SUBDIR
+
+                        echo "Deploying all SQL files from dev_user_1 folder to PROD..."
+
+                        # Collect SQL files
+                        SQL_FILES=\$(find dist/releases/ords/dev_user_1/ -name '*.sql' | sort)
+                        if [ -z "\$SQL_FILES" ]; then
+                            echo "No SQL files found in dev_user_1 folder."
+                            exit 0
+                        fi
+
+                        # Run deployment in SQLCL
+                        ${SQLCL} /nolog <<EOF
+connect \$DB_USER/\$DB_PSW@${PROD_SERVICE}
+
+-- Disable ORDS schema
+BEGIN
+    ORDS.ENABLE_SCHEMA(p_enabled => FALSE, p_schema => '${ORDS_SCHEMA}');
+END;
+/
+
+-- Run each SQL file
+EOF
+
+                        for sqlfile in \$SQL_FILES; do
+                            echo "Running SQL file: \$sqlfile"
+                            ${SQLCL} \$DB_USER/\$DB_PSW@${PROD_SERVICE} @"\$sqlfile"
+                        done
+
+                        ${SQLCL} /nolog <<EOF
+connect \$DB_USER/\$DB_PSW@${PROD_SERVICE}
+
+-- Re-enable ORDS schema
+BEGIN
+    ORDS.ENABLE_SCHEMA(p_enabled => TRUE, p_schema => '${ORDS_SCHEMA}');
+END;
+/
+exit
+EOF
                         """
-                    } else {
-                        echo "No SQL files found to deploy."
                     }
                 }
             }
         }
     }
+
     post {
-        always {
-            echo 'PROD deployment stage finished.'
-        }
+        success { echo 'PROD deployment completed!' }
+        failure { echo 'PROD deployment failed.' }
     }
 }
