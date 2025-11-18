@@ -3,10 +3,6 @@ pipeline {
 
     environment {
         SQLCL = '/opt/oracle/sqlcl/bin/sql'
-        CHANGE_DIR = 'src/database'      // Root path for SQL scripts
-        DEV_SCHEMA = 'dev_user_1'
-        PROD_SCHEMA = 'prod_user_1'
-        DEV_SERVICE = 'cicdadb_low'
         PROD_SERVICE = 'cicdprodadb_low'
     }
 
@@ -17,54 +13,6 @@ pipeline {
                 git branch: 'main',
                     url: 'https://github.com/sn0313/cicd-adb.git',
                     credentialsId: 'github-token'
-            }
-        }
-
-        stage('Deploy to DEV') {
-            steps {
-                script {
-                    withCredentials([
-                        usernamePassword(
-                            credentialsId: '3086a9e1-0196-41a4-ace4-12b7673da99b',
-                            usernameVariable: 'DB_USER',
-                            passwordVariable: 'DB_PSW'
-                        ),
-                        file(
-                            credentialsId: 'cicd-adb-wallet',
-                            variable: 'DEV_WALLET_FILE'
-                        )
-                    ]) {
-
-                        sh """
-                        # Create temp dir for wallet
-                        TMP_WALLET_DIR=\$(mktemp -d)
-                        unzip -o \$DEV_WALLET_FILE -d \$TMP_WALLET_DIR
-
-                        # Find the actual wallet folder inside the ZIP
-                        WALLET_SUBDIR=\$(find \$TMP_WALLET_DIR -mindepth 1 -maxdepth 1 -type d | head -n 1)
-                        export TNS_ADMIN=\$WALLET_SUBDIR
-
-                        SCHEMA_PATH="${CHANGE_DIR}/${DEV_SCHEMA}/tables"
-
-                        echo "Looking for DEV SQL files in: \$SCHEMA_PATH"
-
-                        if [ -d "\$SCHEMA_PATH" ]; then
-                            for sqlfile in \$SCHEMA_PATH/*.sql; do
-                                [ -f "\$sqlfile" ] || continue
-                                echo "Running: \$sqlfile"
-
-                                ${SQLCL} /nolog <<EOF
-                                connect \$DB_USER/\$DB_PSW@${DEV_SERVICE}
-                                @\$sqlfile
-                                exit;
-EOF
-                            done
-                        else
-                            echo "❌ No DEV folder found at \$SCHEMA_PATH"
-                        fi
-                        """
-                    }
-                }
             }
         }
 
@@ -87,31 +35,39 @@ EOF
                         sh """
                         TMP_WALLET_DIR=\$(mktemp -d)
                         unzip -o \$PROD_WALLET_FILE -d \$TMP_WALLET_DIR
-
-                        # Fix: Use TMP_WALLET_DIR directly if there is no subfolder
                         WALLET_SUBDIR=\$(find \$TMP_WALLET_DIR -mindepth 1 -maxdepth 1 -type d | head -n 1)
-                        if [ -z "\$WALLET_SUBDIR" ]; then
-                            WALLET_SUBDIR=\$TMP_WALLET_DIR
-                        fi
+                        [ -z "\$WALLET_SUBDIR" ] && WALLET_SUBDIR=\$TMP_WALLET_DIR
                         export TNS_ADMIN=\$WALLET_SUBDIR
 
-                        SCHEMA_PATH="${CHANGE_DIR}/${PROD_SCHEMA}/tables"
+                        echo "Deploying changed SQL files to PROD..."
 
-                        echo "Looking for PROD SQL files in: \$SCHEMA_PATH"
+                        # Detect SQL files changed in last merge or commit
+                        CHANGED_FILES=\$(git diff --name-only HEAD~1 HEAD | grep -E '\\.sql\$' || true)
 
-                        if [ -d "\$SCHEMA_PATH" ]; then
-                            for sqlfile in \$SCHEMA_PATH/*.sql; do
-                                [ -f "\$sqlfile" ] || continue
-                                echo "Running: \$sqlfile"
+                        if [ -z "\$CHANGED_FILES" ]; then
+                            echo "No SQL changes detected."
+                        else
+                            for sqlfile in \$CHANGED_FILES; do
+                                echo "Running SQL file: \$sqlfile"
 
                                 ${SQLCL} /nolog <<EOF
                                 connect \$DB_USER/\$DB_PSW@${PROD_SERVICE}
-                                @\$sqlfile
+                                BEGIN
+                                    EXECUTE IMMEDIATE ' ' || REPLACE( 
+                                        REPLACE( REPLACE( 
+                                        REPLACE( REPLACE( 
+                                        REPLACE( @\$sqlfile, '\n', ' '), '\r', ' '), '"', '""'), '''', '\'''), ';', ''), '/', '') 
+                                    ;
+                                EXCEPTION
+                                    WHEN OTHERS THEN
+                                        IF SQLCODE != -955 THEN -- ignore 'table already exists'
+                                            RAISE;
+                                        END IF;
+                                END;
+                                /
                                 exit;
 EOF
                             done
-                        else
-                            echo "No PROD folder found at \$SCHEMA_PATH"
                         fi
                         """
                     }
@@ -121,7 +77,7 @@ EOF
     }
 
     post {
-        success { echo 'Deployment completed!' }
-        failure { echo 'Deployment failed.' }
+        success { echo 'PROD deployment completed!' }
+        failure { echo 'PROD deployment failed.' }
     }
 }
