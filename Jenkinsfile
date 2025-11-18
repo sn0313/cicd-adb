@@ -23,15 +23,20 @@ pipeline {
         stage('Deploy to Dev') {
             steps {
                 script {
+                    // Use Jenkins credentials for dev DB
                     withCredentials([usernamePassword(credentialsId: '3086a9e1-0196-41a4-ace4-12b7673da99b',
                                                      usernameVariable: 'DB_USER',
                                                      passwordVariable: 'DB_PSW')]) {
-
                         sh """
-                        for sqlfile in ${CHANGE_DIR}/${SCHEMA_DEV}/tables/*.sql; do
-                            echo "Running \$sqlfile ..."
-                            ${SQLCL} \$DB_USER/\$DB_PSW@\"cicdadb_low\" /nolog @\$sqlfile
-                        done
+                        if [ -d "${CHANGE_DIR}/${SCHEMA_DEV}/tables" ]; then
+                            for sqlfile in ${CHANGE_DIR}/${SCHEMA_DEV}/tables/*.sql; do
+                                [ -f "\$sqlfile" ] || continue
+                                echo "Running \$sqlfile ..."
+                                ${SQLCL} \$DB_USER/\$DB_PSW@\"cicdadb_low\" /nolog @\$sqlfile
+                            done
+                        else
+                            echo "No changes found for DEV in ${CHANGE_DIR}/${SCHEMA_DEV}/tables"
+                        fi
                         """
                     }
                 }
@@ -42,15 +47,20 @@ pipeline {
             steps {
                 input message: "Deploy to PROD? Confirm to continue..."
                 script {
+                    // Use Jenkins credentials for prod DB
                     withCredentials([usernamePassword(credentialsId: 'cicd-prod-adb',
                                                      usernameVariable: 'DB_USER',
                                                      passwordVariable: 'DB_PSW')]) {
-
                         sh """
-                        for sqlfile in ${CHANGE_DIR}/${SCHEMA_PROD}/tables/*.sql; do
-                            echo "Running \$sqlfile ..."
-                            ${SQLCL} \$DB_USER/\$DB_PSW@\"cicdprodadb_low\" /nolog @\$sqlfile
-                        done
+                        if [ -d "${CHANGE_DIR}/${SCHEMA_PROD}/tables" ]; then
+                            for sqlfile in ${CHANGE_DIR}/${SCHEMA_PROD}/tables/*.sql; do
+                                [ -f "\$sqlfile" ] || continue
+                                echo "Running \$sqlfile ..."
+                                ${SQLCL} \$DB_USER/\$DB_PSW@\"cicdprodadb_low\" /nolog @\$sqlfile
+                            done
+                        else
+                            echo "No changes found for PROD in ${CHANGE_DIR}/${SCHEMA_PROD}/tables"
+                        fi
                         """
                     }
                 }
