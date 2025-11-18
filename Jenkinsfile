@@ -2,9 +2,14 @@ pipeline {
     agent any
 
     environment {
-        SQLCL = '/opt/oracle/sqlcl/bin/sql'
         PROD_SERVICE = 'cicdprodadb_low'
-        ORDS_SCHEMA = 'DEV_USER_1'
+        LIQUIBASE_CLASSPATH = '/opt/oracle/ojdbc8.jar'
+        CHANGELOG_FILE = 'changelog.xml' // Your Liquibase changelog in repo
+    }
+
+    triggers {
+        // Poll GitHub for changes (alternatively, configure webhook in GitHub)
+        pollSCM('H/5 * * * *') // every 5 minutes
     }
 
     stages {
@@ -17,76 +22,57 @@ pipeline {
             }
         }
 
-        stage('Deploy to PROD') {
+        stage('Detect Changes') {
             steps {
-                input message: "Deploy to PROD?"
                 script {
-                    withCredentials([
-                        usernamePassword(
-                            credentialsId: 'cicd-prod-adb',
-                            usernameVariable: 'DB_USER',
-                            passwordVariable: 'DB_PSW'
-                        ),
-                        file(
-                            credentialsId: 'cicd-prod-adb-wallet',
-                            variable: 'PROD_WALLET_FILE'
-                        )
-                    ]) {
+                    // Compare current HEAD with previous main commit
+                    PREV_COMMIT = sh(script: "git rev-parse HEAD~1", returnStdout: true).trim()
+                    CURRENT_COMMIT = sh(script: "git rev-parse HEAD", returnStdout: true).trim()
+                    echo "Previous commit: ${PREV_COMMIT}"
+                    echo "Current commit: ${CURRENT_COMMIT}"
 
-                        sh """
-                        # Prepare wallet
-                        TMP_WALLET_DIR=\$(mktemp -d)
-                        unzip -o \$PROD_WALLET_FILE -d \$TMP_WALLET_DIR
-                        WALLET_SUBDIR=\$(find \$TMP_WALLET_DIR -mindepth 1 -maxdepth 1 -type d | head -n 1)
-                        [ -z "\$WALLET_SUBDIR" ] && WALLET_SUBDIR=\$TMP_WALLET_DIR
-                        export TNS_ADMIN=\$WALLET_SUBDIR
+                    // Detect files changed in dev_user_1 folder
+                    CHANGED_FILES = sh(
+                        script: "git diff --name-only ${PREV_COMMIT} ${CURRENT_COMMIT} | grep '^dist/releases/ords/dev_user_1/' || true",
+                        returnStdout: true
+                    ).trim()
 
-                        echo "Deploying all SQL files from dev_user_1 folder to PROD..."
-
-                        # Collect SQL files
-                        SQL_FILES=\$(find dist/releases/ords/dev_user_1/ -name '*.sql' | sort)
-                        if [ -z "\$SQL_FILES" ]; then
-                            echo "No SQL files found in dev_user_1 folder."
-                            exit 0
-                        fi
-
-                        # Run deployment in SQLCL
-                        ${SQLCL} /nolog <<EOF
-connect \$DB_USER/\$DB_PSW@${PROD_SERVICE}
-
--- Disable ORDS schema
-BEGIN
-    ORDS.ENABLE_SCHEMA(p_enabled => FALSE, p_schema => '${ORDS_SCHEMA}');
-END;
-/
-
--- Run each SQL file
-EOF
-
-                        for sqlfile in \$SQL_FILES; do
-                            echo "Running SQL file: \$sqlfile"
-                            ${SQLCL} \$DB_USER/\$DB_PSW@${PROD_SERVICE} @"\$sqlfile"
-                        done
-
-                        ${SQLCL} /nolog <<EOF
-connect \$DB_USER/\$DB_PSW@${PROD_SERVICE}
-
--- Re-enable ORDS schema
-BEGIN
-    ORDS.ENABLE_SCHEMA(p_enabled => TRUE, p_schema => '${ORDS_SCHEMA}');
-END;
-/
-exit
-EOF
-                        """
+                    if (!CHANGED_FILES) {
+                        echo "No changes detected in dev_user_1 folder. Skipping deployment."
+                        currentBuild.result = 'SUCCESS'
+                        error("No relevant changes")
+                    } else {
+                        echo "Changed SQL files:\n${CHANGED_FILES}"
                     }
+                }
+            }
+        }
+
+        stage('Deploy to PROD with Liquibase') {
+            steps {
+                input message: "Deploy to PROD?" // optional manual approval
+                withCredentials([usernamePassword(
+                    credentialsId: 'cicd-prod-adb',
+                    usernameVariable: 'DB_USER',
+                    passwordVariable: 'DB_PSW'
+                )]) {
+                    sh """
+                        echo "Running Liquibase deployment..."
+                        liquibase \
+                          --url=jdbc:oracle:thin:@${PROD_SERVICE} \
+                          --username=$DB_USER \
+                          --password=$DB_PSW \
+                          --changeLogFile=${CHANGELOG_FILE} \
+                          --classpath=${LIQUIBASE_CLASSPATH} \
+                          update
+                    """
                 }
             }
         }
     }
 
     post {
-        success { echo 'PROD deployment completed!' }
+        success { echo 'PROD deployment completed successfully!' }
         failure { echo 'PROD deployment failed.' }
     }
 }
