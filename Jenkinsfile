@@ -33,6 +33,7 @@ pipeline {
                     ]) {
 
                         sh """
+                        # Create temporary wallet directory
                         TMP_WALLET_DIR=\$(mktemp -d)
                         unzip -o \$PROD_WALLET_FILE -d \$TMP_WALLET_DIR
                         WALLET_SUBDIR=\$(find \$TMP_WALLET_DIR -mindepth 1 -maxdepth 1 -type d | head -n 1)
@@ -41,26 +42,12 @@ pipeline {
 
                         echo "Deploying all SQL files from dev_user_1 folder to PROD..."
 
+                        # Loop through all SQL files in dev_user_1 folder
                         for sqlfile in dist/releases/ords/dev_user_1/*.sql; do
-                            [ -f "\$sqlfile" ] || continue
-                            echo "Running SQL file: \$sqlfile"
-
-                            ${SQLCL} /nolog <<EOF
-                            connect \$DB_USER/\$DB_PSW@${PROD_SERVICE}
-                            BEGIN
-                                EXECUTE IMMEDIATE ' ' || REPLACE(
-                                    REPLACE(REPLACE(
-                                    REPLACE(REPLACE(
-                                    REPLACE(@\$sqlfile, '\\n', ' '), '\\r', ' '), '"', '""'), '''', '\'''), ';', ''), '/', '');
-                            EXCEPTION
-                                WHEN OTHERS THEN
-                                    IF SQLCODE != -955 THEN -- ignore 'table already exists'
-                                        RAISE;
-                                    END IF;
-                            END;
-                            /
-                            exit;
-EOF
+                            if [ -f "\$sqlfile" ]; then
+                                echo "Running SQL file: \$sqlfile"
+                                ${SQLCL} \$DB_USER/\$DB_PSW@${PROD_SERVICE} @\$sqlfile
+                            fi
                         done
                         """
                     }
@@ -74,4 +61,3 @@ EOF
         failure { echo 'PROD deployment failed.' }
     }
 }
-
